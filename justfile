@@ -90,10 +90,12 @@ e2e:
 [doc('Full local acceptance: check + coverage + build + E2E (trust without CI)')]
 verify: typecheck lint typos coverage build e2e
 
-# The full local gate, in one shot: typecheck + Biome + typos + tests. Mirrors CI.
+# The full local gate, in one shot: typecheck + Biome + typos + tests (with coverage
+# thresholds on domain/lib). Mirrors CI — the pre-push hook and the CI check job both
+# run exactly this, so thresholds are enforced everywhere, not just report-only.
 [group('gates')]
-[doc('Full local gate: typecheck + Biome + typos + tests (mirrors CI)')]
-check: typecheck lint typos test
+[doc('Full local gate: typecheck + Biome + typos + tests (coverage) — mirrors CI')]
+check: typecheck lint typos coverage
 
 # Production build (tsc -b + vite build).
 [group('gates')]
@@ -119,10 +121,10 @@ app-dev:
 app-build:
     pnpm tauri build
 
-# Test the Rust core (photo-diary-core).
+# Test the Rust workspace (photo-diary-core + the src-tauri shell's unit tests).
 [group('desktop')]
 app-test:
-    cargo test -p photo-diary-core
+    cargo test --workspace
 
 # Lint the Rust code (clippy -D warnings) + format check.
 [group('desktop')]

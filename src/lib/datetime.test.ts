@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest'
+import { afterEach, describe, expect, it, vi } from 'vitest'
 import {
   formatDateRange,
   formatDayLabel,
@@ -8,7 +8,28 @@ import {
   formatShortWeekday,
   formatTakenAt,
   formatWeekday,
+  formatYearMonth,
+  todayParts,
 } from './datetime'
+
+describe('todayParts', () => {
+  afterEach(() => {
+    vi.useRealTimers()
+  })
+
+  it('returns the local year, 1-based month, and day of the current date', () => {
+    vi.useFakeTimers()
+    vi.setSystemTime(new Date(2026, 6, 5, 12, 0, 0)) // 2026-07-05 local
+    expect(todayParts()).toEqual({ year: 2026, month: 7, day: 5 })
+  })
+})
+
+describe('formatYearMonth', () => {
+  it('formats a year and 1-based month label per locale', () => {
+    expect(formatYearMonth(2026, 7, 'en')).toBe('July 2026')
+    expect(formatYearMonth(2026, 7, 'ja')).toBe('2026年7月')
+  })
+})
 
 describe('formatMonthDay', () => {
   it('formats per locale', () => {

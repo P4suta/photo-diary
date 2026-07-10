@@ -41,11 +41,35 @@ test('the sidebar navigates to calendar, highlights, and settings', async ({ pag
   await expect(page).toHaveURL(/\/calendar$/)
   await expect(page.getByText('July 2026')).toBeVisible()
 
+  // A note-only day (7/1 in the fixtures: a note, no photos) surfaces as a hasNote dot +
+  // "note" label in the month grid — the calendar reflection of hasNote.
+  await expect(page.getByText('note', { exact: true }).first()).toBeVisible()
+
   await page.getByRole('link', { name: 'Highlights' }).click()
   await expect(page).toHaveURL(/\/highlights$/)
 
   await page.getByRole('link', { name: 'Settings' }).click()
   await expect(page).toHaveURL(/\/settings$/)
+})
+
+test('starring a photo in the lightbox persists across close and reopen', async ({ page }) => {
+  await page.getByLabel('Open photo').first().click()
+  await expect(page.getByText(/\d+ \/ \d+ ·/)).toBeVisible()
+
+  // The star toggle shows exactly one of the two labels; flip it and expect the other.
+  const pick = page.getByRole('button', { name: '★ Pick', exact: true })
+  const picked = page.getByRole('button', { name: '★ Picked', exact: true })
+  const wasStarred = await picked.isVisible()
+  await (wasStarred ? picked : pick).click()
+  const flipped = wasStarred ? pick : picked
+  await expect(flipped).toBeVisible()
+
+  // Close, then reopen the same photo: the star state must persist (toggleStar upsert +
+  // query invalidation, resolved live from the timeline cache — no stale snapshot).
+  await page.keyboard.press('Escape')
+  await expect(page.getByText(/\d+ \/ \d+ ·/)).toBeHidden()
+  await page.getByLabel('Open photo').first().click()
+  await expect(flipped).toBeVisible()
 })
 
 test('editing a note saves and the feed re-renders with the new text', async ({ page }) => {

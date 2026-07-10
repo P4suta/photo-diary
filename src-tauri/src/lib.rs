@@ -174,3 +174,96 @@ pub fn run() {
         .run(tauri::generate_context!())
         .expect("error while running photo-diary");
 }
+
+#[cfg(test)]
+mod tests {
+    // Serde wire-contract tests for the shell-owned DTOs. They exercise only the serializable
+    // structs (no tauri runtime), pinning the exact camelCase JSON the frontend's `commands.ts`
+    // decodes for `import_folder` and its progress channel.
+    use super::{ImportDto, ImportFailureDto};
+    use photo_diary_core::{ImportFailure, ImportProgress, ImportSummary};
+    use serde_json::Value;
+    use std::collections::BTreeSet;
+
+    fn keys(v: &Value) -> BTreeSet<String> {
+        v.as_object().unwrap().keys().cloned().collect()
+    }
+
+    fn expect(list: &[&str]) -> BTreeSet<String> {
+        list.iter().map(|s| s.to_string()).collect()
+    }
+
+    #[test]
+    fn import_dto_serializes_exact_camelcase_keys_with_nested_failures() {
+        let dto = ImportDto {
+            imported: 3,
+            skipped: 1,
+            skipped_unsupported: 2,
+            bytes_saved: -42,
+            failed: vec![ImportFailureDto {
+                path: "a/b.heic".into(),
+                reason: "decode failed".into(),
+            }],
+            scan_errors: vec!["permission denied".into()],
+        };
+        let v = serde_json::to_value(&dto).unwrap();
+        assert_eq!(
+            keys(&v),
+            expect(&[
+                "imported",
+                "skipped",
+                "skippedUnsupported",
+                "bytesSaved",
+                "failed",
+                "scanErrors",
+            ])
+        );
+        // `failed` is an array of { path, reason }.
+        assert!(v["failed"].is_array());
+        let f = &v["failed"][0];
+        assert_eq!(keys(f), expect(&["path", "reason"]));
+        assert_eq!(f["path"], "a/b.heic");
+        assert_eq!(f["reason"], "decode failed");
+        // `scanErrors` is a JSON array of strings; `bytesSaved` keeps its sign.
+        assert!(v["scanErrors"].is_array());
+        assert_eq!(v["scanErrors"][0], "permission denied");
+        assert_eq!(v["bytesSaved"], -42);
+    }
+
+    #[test]
+    fn import_dto_from_summary_maps_every_field() {
+        let summary = ImportSummary {
+            imported: 5,
+            skipped: 2,
+            skipped_unsupported: 1,
+            bytes_saved: 1000,
+            failed: vec![ImportFailure {
+                path: "x.jpg".into(),
+                reason: "io".into(),
+            }],
+            scan_errors: vec!["walk error".into()],
+        };
+        let v = serde_json::to_value(ImportDto::from(summary)).unwrap();
+        assert_eq!(v["imported"], 5);
+        assert_eq!(v["skipped"], 2);
+        assert_eq!(v["skippedUnsupported"], 1);
+        assert_eq!(v["bytesSaved"], 1000);
+        assert_eq!(v["failed"][0]["path"], "x.jpg");
+        assert_eq!(v["failed"][0]["reason"], "io");
+        assert_eq!(v["scanErrors"][0], "walk error");
+    }
+
+    #[test]
+    fn import_progress_event_payload_serializes_camelcase() {
+        let p = ImportProgress {
+            current: 4,
+            total: 10,
+            filename: "IMG_0004.jpg".into(),
+        };
+        let v = serde_json::to_value(&p).unwrap();
+        assert_eq!(keys(&v), expect(&["current", "total", "filename"]));
+        assert_eq!(v["current"], 4);
+        assert_eq!(v["total"], 10);
+        assert_eq!(v["filename"], "IMG_0004.jpg");
+    }
+}

@@ -1,13 +1,18 @@
 import { describe, expect, it } from 'vitest'
+import type { ImportProgress } from '@/domain/models'
 import type { PhotoLibrary } from '@/domain/ports'
 
 /**
  * Implementation-independent contract suite for the PhotoLibrary port — the seam
- * is the center of the testing strategy. Phase 2's TauriPhotoLibrary can reuse this
- * suite unchanged (it guards the runtime invariants that `implements` alone cannot).
+ * is the center of the testing strategy. Both adapters run it unchanged: the mock
+ * (`MockPhotoLibrary.contract.test.ts`) and the real one over a fake IPC transport
+ * (`TauriPhotoLibrary.test.ts`). It guards the runtime invariants that `implements`
+ * alone cannot.
  *
- * factory() is called each time, but the mock shares module-singleton fixtures, so
- * the mutating tests (saveNote/toggleStar) restore what they change.
+ * factory() returns a fresh, isolated library each call, so the mutating cases
+ * (saveNote/toggleStar/importFolder) can never leak across `it` blocks; the fresh-date
+ * case additionally uses a date outside every fixture's range so it cannot collide
+ * with the read cases even if an adapter shared state.
  */
 export function runPortContract(name: string, factory: () => PhotoLibrary): void {
   describe(`PhotoLibrary contract: ${name}`, () => {
@@ -37,6 +42,18 @@ export function runPortContract(name: string, factory: () => PhotoLibrary): void
         expect(c.level).toBeGreaterThanOrEqual(-1)
         expect(c.level).toBeLessThanOrEqual(4)
       }
+    })
+
+    it('getMonth: hasNote is a boolean and reflects the per-day records', async () => {
+      // July 2026 is the fixture month both adapters populate; it carries notes.
+      const cells = await factory().getMonth(2026, 7)
+      for (const c of cells) {
+        expect(typeof c.hasNote).toBe('boolean')
+      }
+      // At least one real day must surface hasNote — proving the flag is wired from the
+      // records, not hardcoded false. (Save→calendar reflection is intentionally NOT
+      // asserted here: the mock's getMonth reads static month records, not saveNote state.)
+      expect(cells.some((c) => !c.blank && c.hasNote)).toBe(true)
     })
 
     it('getHeatmap: 7 days per week, level in -1..4', async () => {
@@ -77,6 +94,41 @@ export function runPortContract(name: string, factory: () => PhotoLibrary): void
       const updated = (await lib.listTimeline()).find((d) => d.date === target.date)
       expect(updated && 'note' in updated ? updated.note : null).toBe('contract test note')
       await lib.saveNote(target.date, original) // restore
+    })
+
+    it('saveNote: creates a note_only day on a photoless date, and clearing it removes the day', async () => {
+      const lib = factory()
+      // A date outside every fixture's range: no photos, no note, no card yet.
+      const fresh = '2019-03-14'
+      expect((await lib.listTimeline()).some((d) => d.date === fresh)).toBe(false)
+
+      // The core "write a line on a day you took no photos" flow: a note upserts a day.
+      await lib.saveNote(fresh, 'a line on an empty day')
+      const created = (await lib.listTimeline()).find((d) => d.date === fresh)
+      expect(created && 'note' in created ? created.note : null).toBe('a line on an empty day')
+
+      // Clearing the note deletes the row; a photoless day then has nothing left to show.
+      await lib.saveNote(fresh, '')
+      expect((await lib.listTimeline()).find((d) => d.date === fresh)).toBeUndefined()
+    })
+
+    it('importFolder: returns a well-formed result and emits progress', async () => {
+      const events: ImportProgress[] = []
+      const result = await factory().importFolder('/any/path', (p) => events.push(p))
+
+      expect(typeof result.imported).toBe('number')
+      expect(typeof result.skipped).toBe('number')
+      expect(typeof result.skippedUnsupported).toBe('number')
+      expect(typeof result.bytesSaved).toBe('number')
+      expect(Array.isArray(result.failed)).toBe(true)
+      expect(Array.isArray(result.scanErrors)).toBe(true)
+
+      // At least one progress tick, each within [1, total].
+      expect(events.length).toBeGreaterThan(0)
+      for (const e of events) {
+        expect(e.current).toBeGreaterThanOrEqual(1)
+        expect(e.current).toBeLessThanOrEqual(e.total)
+      }
     })
 
     it('toggleStar: two toggles return to the original (idempotent flip)', async () => {

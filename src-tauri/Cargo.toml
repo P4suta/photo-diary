@@ -16,3 +16,8 @@ tauri = { version = "2", features = ["protocol-asset"] }
 tauri-plugin-dialog = "2"
 photo-diary-core = { path = "../crates/photo-diary-core" }
 serde = { version = "1", features = ["derive"] }
+
+[dev-dependencies]
+# Serde-contract tests pin the exact JSON keys the frontend reads for ImportDto and the
+# import-progress event payload. Already locked transitively via tauri; no version churn.
+serde_json = "1"

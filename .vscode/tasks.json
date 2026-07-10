@@ -6,7 +6,7 @@
   "tasks": [
     {
       "label": "check",
-      "detail": "just check — typecheck + Biome + typos (the full gate, same as CI)",
+      "detail": "just check — typecheck + Biome + typos + tests (coverage) — the full gate, same as CI",
       "type": "shell",
       "command": "just",
       "args": ["check"],

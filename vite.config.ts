@@ -1,7 +1,12 @@
 import { fileURLToPath, URL } from 'node:url'
 import react from '@vitejs/plugin-react'
 // vitest/config extends vite's defineConfig so the `test` field is typed.
-import { defineConfig } from 'vitest/config'
+import { configDefaults, defineConfig } from 'vitest/config'
+
+// .ts tests that need a DOM (jsdom), so they're carved out of the node project and
+// added to jsdom explicitly. Structural globs (below) handle everything else, so a
+// new test file can never silently match zero projects.
+const DOM_TS_TESTS = ['src/app/theme.test.ts']
 
 // https://vite.dev/config/
 export default defineConfig({
@@ -16,19 +21,20 @@ export default defineConfig({
     // Splitting tests by environment mirrors the architecture's layers directly.
     //  - node   : pure domain / lib / contract / store (no DOM, lightweight and fast)
     //  - jsdom  : UI components / interaction / a11y (need React rendering)
+    //
+    // The split is structural, not a hand-maintained whitelist: every `.test.ts` runs
+    // in node (except the DOM-needing carve-outs) and every `.test.tsx` runs in jsdom.
+    // Their union is exactly `src/**/*.test.*` with no overlap, so a test file can
+    // never silently belong to zero projects (or both).
     projects: [
       {
         extends: true, // inherit the root alias(@)/plugin
         test: {
           name: 'node',
           environment: 'node',
-          include: [
-            'src/domain/**/*.test.ts',
-            'src/lib/**/*.test.ts',
-            'src/features/calendar/heat.test.ts',
-            'src/data/**/*.test.ts',
-            'src/app/ui-store.test.ts',
-          ],
+          include: ['src/**/*.test.ts'],
+          // .ts tests that need a DOM run in jsdom instead — keep the sets disjoint.
+          exclude: [...configDefaults.exclude, ...DOM_TS_TESTS],
         },
       },
       {
@@ -37,7 +43,7 @@ export default defineConfig({
           name: 'jsdom',
           environment: 'jsdom',
           setupFiles: ['./src/test/polyfills.ts', './src/test/setup.ts'],
-          include: ['src/**/*.test.tsx', 'src/app/theme.test.ts', 'src/app/queries.test.tsx'],
+          include: ['src/**/*.test.tsx', ...DOM_TS_TESTS],
         },
       },
     ],

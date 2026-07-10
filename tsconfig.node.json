@@ -14,5 +14,9 @@
     "noUnusedLocals": true,
     "noUnusedParameters": true
   },
-  "include": ["vite.config.ts"]
+  // The Node-side (non-browser) TS: build config + tooling + Playwright e2e. The app
+  // itself lives in tsconfig.app.json; everything that runs in Node instead of the
+  // browser is checked here so `tsc -b` covers it. These files were previously
+  // type-checked by nothing.
+  "include": ["vite.config.ts", "playwright.config.ts", "tailwind.config.ts", "e2e/**/*.ts"]
 }
