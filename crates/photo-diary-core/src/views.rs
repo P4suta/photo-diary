@@ -1,35 +1,37 @@
 //! Read-query layer. DB -> DTO (raw data). Presentation is built on the frontend.
 
 use crate::db::Db;
-use crate::dto::{DayCountDto, FolderDto, MonthRecordDto, NoteDto, PhotoDto, PlaceFacetDto};
+use crate::dto::{DayCountDto, MonthRecordDto, NoteDto, PhotoDto, PlaceFacetDto};
+use crate::model::FolderRow;
 use crate::Result;
 use std::collections::{BTreeMap, BTreeSet};
+use std::path::Path;
 
 const PHOTO_COLS: &str = "id, store_path, store_bytes, thumb_path, taken_at, lat, lng, \
     width, height, original_filename, original_hash, place, imported_at, starred, caption";
 
 impl Db {
-    /// All photos, taken_at descending.
-    pub fn all_photos(&self) -> Result<Vec<PhotoDto>> {
+    /// All photos, taken_at descending. `data_dir` resolves DB-relative thumb paths to absolute.
+    pub fn all_photos(&self, data_dir: &Path) -> Result<Vec<PhotoDto>> {
         let sql = format!("SELECT {PHOTO_COLS} FROM photos ORDER BY taken_at DESC");
         let mut stmt = self.conn.prepare(&sql)?;
         let rows = stmt.query_map([], Self::map_photo_row)?;
         let mut out = Vec::new();
         for r in rows {
-            out.push(PhotoDto::from(r?));
+            out.push(PhotoDto::from_row(r?, data_dir));
         }
         Ok(out)
     }
 
-    /// Starred photos, taken_at descending.
-    pub fn starred_photos(&self) -> Result<Vec<PhotoDto>> {
+    /// Starred photos, taken_at descending. `data_dir` resolves DB-relative thumb paths.
+    pub fn starred_photos(&self, data_dir: &Path) -> Result<Vec<PhotoDto>> {
         let sql =
             format!("SELECT {PHOTO_COLS} FROM photos WHERE starred = 1 ORDER BY taken_at DESC");
         let mut stmt = self.conn.prepare(&sql)?;
         let rows = stmt.query_map([], Self::map_photo_row)?;
         let mut out = Vec::new();
         for r in rows {
-            out.push(PhotoDto::from(r?));
+            out.push(PhotoDto::from_row(r?, data_dir));
         }
         Ok(out)
     }
@@ -115,18 +117,23 @@ impl Db {
         Ok(out)
     }
 
-    /// List of watched folders.
-    pub fn list_folders(&self) -> Result<Vec<FolderDto>> {
-        let mut stmt = self
-            .conn
-            .prepare("SELECT id, path, added_at FROM folders ORDER BY id")?;
+    /// Watched folders with a real photo count (LEFT JOIN on `photos.folder_id`, so folders
+    /// with zero photos still appear with count 0) and the recorded `last_scan`. The fs-derived
+    /// status is added by the Library layer; the Db stays fs-free.
+    pub fn list_folders(&self) -> Result<Vec<FolderRow>> {
+        let mut stmt = self.conn.prepare(
+            "SELECT f.id, f.path, f.last_scan, COUNT(p.id) AS photo_count
+             FROM folders f
+             LEFT JOIN photos p ON p.folder_id = f.id
+             GROUP BY f.id, f.path, f.last_scan
+             ORDER BY f.id",
+        )?;
         let rows = stmt.query_map([], |r| {
-            Ok(FolderDto {
-                id: r.get::<_, i64>(0)?.to_string(),
+            Ok(FolderRow {
+                id: r.get(0)?,
                 path: r.get(1)?,
-                status: "watching".to_string(),
                 last_scan: r.get(2)?,
-                photo_count: 0,
+                photo_count: r.get(3)?,
             })
         })?;
         let mut out = Vec::new();

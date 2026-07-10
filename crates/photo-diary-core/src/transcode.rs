@@ -1,33 +1,36 @@
 use crate::model::AvifInfo;
 use crate::Result;
+use image::codecs::avif::AvifEncoder;
+use image::{DynamicImage, ImageEncoder};
 use std::path::Path;
 
-/// Decodes `src` and re-encodes it to AVIF (visually lossless) at **full resolution**,
-/// saving to `dst`.
-/// - `quality`: 0.0..=100.0 (ravif quality; visually lossless is roughly 80-90).
-/// - Dimensions are not reduced (keeps the original resolution).
+/// Encoder speed (0=slowest/smallest, 10=fastest). 6 balances encode time against size.
+const AVIF_SPEED: u8 = 6;
+
+/// Re-encodes an already-decoded (and orientation-corrected) image to AVIF (visually
+/// lossless) at **full resolution**, saving to `dst`.
+/// - `quality`: 0.0..=100.0 (image's AvifEncoder quality; visually lossless is roughly 80-90).
+/// - Dimensions are not reduced (keeps the source resolution).
 /// - Returns the saved byte count and dimensions.
 ///
-/// Contract: do not change this public signature (core of internal library storage).
-pub fn to_avif(src: &Path, dst: &Path, quality: f32) -> Result<AvifInfo> {
-    let img = image::open(src)?.into_rgba8();
-    let (w, h) = img.dimensions();
+/// Contract: takes a decoded `&DynamicImage` (the caller decodes and applies EXIF orientation
+/// once, sharing the pixels with thumbnail generation) rather than a path. Encoding uses
+/// image's own `AvifEncoder` (ravif/rav1e) so only one rav1e version is compiled.
+pub fn to_avif(img: &DynamicImage, dst: &Path, quality: f32) -> Result<AvifInfo> {
+    let rgba = img.to_rgba8();
+    let (w, h) = rgba.dimensions();
 
-    let pixels: Vec<rgb::RGBA8> = img
-        .pixels()
-        .map(|p| rgb::RGBA8::new(p[0], p[1], p[2], p[3]))
-        .collect();
-    let ir = imgref::Img::new(pixels, w as usize, h as usize);
-
-    let enc = ravif::Encoder::new().with_quality(quality).with_speed(6);
-    let out = enc
-        .encode_rgba(ir.as_ref())
+    // Encode into memory first so we can report the exact byte count and write atomically.
+    let mut out: Vec<u8> = Vec::new();
+    let quality = quality.round().clamp(1.0, 100.0) as u8;
+    AvifEncoder::new_with_speed_quality(&mut out, AVIF_SPEED, quality)
+        .write_image(rgba.as_raw(), w, h, image::ExtendedColorType::Rgba8)
         .map_err(|e| crate::Error::Avif(e.to_string()))?;
 
-    std::fs::write(dst, &out.avif_file)?;
+    std::fs::write(dst, &out)?;
 
     Ok(AvifInfo {
-        bytes: out.avif_file.len() as u64,
+        bytes: out.len() as u64,
         width: w,
         height: h,
     })
@@ -58,8 +61,9 @@ mod tests {
         let dst = dir.path().join("out.avif");
 
         write_test_png(&src);
+        let img = image::open(&src).expect("open");
 
-        let info = to_avif(&src, &dst, 80.0).expect("to_avif");
+        let info = to_avif(&img, &dst, 80.0).expect("to_avif");
 
         assert_eq!(info.width, 16, "width preserved");
         assert_eq!(info.height, 16, "height preserved");
@@ -82,8 +86,9 @@ mod tests {
             *px = Rgba([(x * 10) as u8, 128, 200, 255]);
         }
         img.save(&src).expect("save wide png");
+        let decoded = image::open(&src).expect("open");
 
-        let info = to_avif(&src, &dst, 80.0).expect("to_avif");
+        let info = to_avif(&decoded, &dst, 80.0).expect("to_avif");
 
         assert_eq!(info.width, 24);
         assert_eq!(info.height, 8);
@@ -92,13 +97,23 @@ mod tests {
     }
 
     #[test]
-    fn to_avif_missing_source_is_err() {
+    fn to_avif_applies_source_orientation_via_caller() {
+        // to_avif encodes exactly the pixels it is given: an oriented image yields
+        // post-rotation dimensions. Here a 24x8 landscape rotated 90 becomes 8x24.
         let dir = tempfile::tempdir().expect("tempdir");
-        let src = dir.path().join("does-not-exist.png");
-        let dst = dir.path().join("out.avif");
+        let src = dir.path().join("landscape.png");
+        let dst = dir.path().join("rotated.avif");
 
-        let res = to_avif(&src, &dst, 80.0);
-        assert!(res.is_err(), "missing source should be an error");
-        assert!(!dst.exists(), "no output written on failure");
+        let mut img = RgbaImage::new(24, 8);
+        for (x, _y, px) in img.enumerate_pixels_mut() {
+            *px = Rgba([(x * 10) as u8, 128, 200, 255]);
+        }
+        img.save(&src).expect("save png");
+
+        let decoded = image::open(&src).expect("open");
+        let oriented = crate::orient::apply_orientation(decoded, 6); // rotate 90 CW
+        let info = to_avif(&oriented, &dst, 80.0).expect("to_avif");
+
+        assert_eq!((info.width, info.height), (8, 24), "dims are post-rotation");
     }
 }

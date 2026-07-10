@@ -18,7 +18,17 @@ type LibState = Mutex<Library>;
 struct ImportDto {
     imported: u32,
     skipped: u32,
+    skipped_unsupported: u32,
     bytes_saved: i64,
+    failed: Vec<ImportFailureDto>,
+    scan_errors: Vec<String>,
+}
+
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+struct ImportFailureDto {
+    path: String,
+    reason: String,
 }
 
 /// Imports a folder (scan -> EXIF -> AVIF -> thumbnail -> SQLite; duplicates skipped).
@@ -31,7 +41,17 @@ fn import_folder(path: String, state: State<'_, LibState>) -> Result<ImportDto, 
     Ok(ImportDto {
         imported: s.imported,
         skipped: s.skipped,
+        skipped_unsupported: s.skipped_unsupported,
         bytes_saved: s.bytes_saved,
+        failed: s
+            .failed
+            .into_iter()
+            .map(|f| ImportFailureDto {
+                path: f.path,
+                reason: f.reason,
+            })
+            .collect(),
+        scan_errors: s.scan_errors,
     })
 }
 
@@ -39,14 +59,14 @@ fn import_folder(path: String, state: State<'_, LibState>) -> Result<ImportDto, 
 #[tauri::command]
 fn list_photos(state: State<'_, LibState>) -> Result<Vec<PhotoDto>, String> {
     let lib = state.lock().map_err(|e| e.to_string())?;
-    lib.db().all_photos().map_err(|e| e.to_string())
+    lib.list_photos().map_err(|e| e.to_string())
 }
 
 /// Starred photos.
 #[tauri::command]
 fn list_starred(state: State<'_, LibState>) -> Result<Vec<PhotoDto>, String> {
     let lib = state.lock().map_err(|e| e.to_string())?;
-    lib.db().starred_photos().map_err(|e| e.to_string())
+    lib.list_starred().map_err(|e| e.to_string())
 }
 
 /// All day notes.
@@ -76,11 +96,11 @@ fn month_records(
         .map_err(|e| e.to_string())
 }
 
-/// List of watched folders.
+/// List of watched folders (real photo counts, last_scan, and fs-derived status).
 #[tauri::command]
 fn list_folders(state: State<'_, LibState>) -> Result<Vec<FolderDto>, String> {
     let lib = state.lock().map_err(|e| e.to_string())?;
-    lib.db().list_folders().map_err(|e| e.to_string())
+    lib.list_folders().map_err(|e| e.to_string())
 }
 
 /// Place facets (for search).

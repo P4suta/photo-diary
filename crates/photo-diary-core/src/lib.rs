@@ -8,10 +8,11 @@ pub mod error;
 pub mod exif;
 pub mod library;
 pub mod model;
+pub mod orient;
 pub mod scan;
 pub mod thumbnail;
 pub mod transcode;
 pub mod views;
 
 pub use error::{Error, Result};
-pub use library::{ImportSummary, Library};
+pub use library::{ImportFailure, ImportSummary, Library};

@@ -9,16 +9,17 @@ publish = false
 thiserror = "2"
 walkdir = "2"
 kamadak-exif = "0.6"
-image = "0.25"
-# Disable asm: drop rav1e's NASM build dependency and build in pure Rust (don't require
-# nasm on the system = reproducibility first). Keep threading to preserve parallel encoding.
-ravif = { version = "0.11", default-features = false, features = ["threading"] }
-rgb = "0.8"
-imgref = "1"
+# AVIF encoding goes through image's own `avif` feature (ravif/rav1e, pure Rust). This
+# replaces the former direct `ravif` dependency so only one rav1e is compiled (image already
+# pulls ravif transitively). The `avif` feature is encode-only (no dav1d/`avif-native`), so
+# no NASM/system library is required = reproducibility first.
+image = { version = "0.25", features = ["avif"] }
 rusqlite = { version = "0.32", features = ["bundled"] }
 serde = { version = "1", features = ["derive"] }
 sha2 = "0.10"
-time = "0.3"
+# `local-offset` lets us capture the machine's UTC offset at startup so mtime/now fallbacks
+# are formatted in local wall-clock time (matching EXIF), not UTC.
+time = { version = "0.3", features = ["local-offset"] }
 
 [dev-dependencies]
 tempfile = "3"

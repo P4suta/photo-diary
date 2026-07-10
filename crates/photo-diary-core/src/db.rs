@@ -5,17 +5,31 @@ use std::path::Path;
 
 /// SQLite wrapper. Schema mirrors `src/domain` (frontend):
 /// - `photos(id, store_path UNIQUE, store_bytes, thumb_path, taken_at, lat, lng,
-///    width, height, original_filename, original_hash UNIQUE, place, starred, caption)`
+///    width, height, original_filename, original_hash UNIQUE, place, starred, caption,
+///    folder_id -> folders(id))`
 /// - `day_notes(date PRIMARY KEY 'YYYY-MM-DD', note, updated_at)`
-/// - `folders(id, path UNIQUE, added_at)`
+/// - `folders(id, path UNIQUE, added_at, last_scan)`
 /// - index on `substr(taken_at,1,10)` (for grouping by day)
 pub struct Db {
     pub conn: Connection,
 }
 
-/// Schema definition (idempotent).
-const SCHEMA: &str = "\
-CREATE TABLE IF NOT EXISTS photos (
+/// Ordered schema migrations. Index `i` migrates the database *to* `user_version = i + 1`;
+/// `open()` applies every migration whose target exceeds the current `PRAGMA user_version`,
+/// then stamps the new version. To evolve the schema, append a new migration string (never
+/// edit an old one). v1 is the full initial schema (folders created before photos for the FK).
+///
+/// Pre-release: there is no path from an unversioned (user_version 0, pre-migration) dev
+/// database — those must be deleted and re-imported. This only matters for local dev DBs;
+/// there are no released users yet.
+const MIGRATIONS: &[&str] = &["\
+CREATE TABLE folders (
+    id        INTEGER PRIMARY KEY AUTOINCREMENT,
+    path      TEXT NOT NULL UNIQUE,
+    added_at  TEXT NOT NULL,
+    last_scan TEXT NOT NULL DEFAULT ''
+);
+CREATE TABLE photos (
     id                INTEGER PRIMARY KEY AUTOINCREMENT,
     store_path        TEXT    NOT NULL UNIQUE,
     store_bytes       INTEGER NOT NULL,
@@ -30,27 +44,36 @@ CREATE TABLE IF NOT EXISTS photos (
     place             TEXT,
     imported_at       TEXT    NOT NULL DEFAULT '',
     starred           INTEGER NOT NULL DEFAULT 0,
-    caption           TEXT
+    caption           TEXT,
+    folder_id         INTEGER REFERENCES folders(id)
 );
-CREATE TABLE IF NOT EXISTS day_notes (
+CREATE TABLE day_notes (
     date       TEXT PRIMARY KEY,
     note       TEXT NOT NULL,
     updated_at TEXT NOT NULL
 );
-CREATE TABLE IF NOT EXISTS folders (
-    id       INTEGER PRIMARY KEY AUTOINCREMENT,
-    path     TEXT NOT NULL UNIQUE,
-    added_at TEXT NOT NULL
-);
-CREATE INDEX IF NOT EXISTS idx_photos_day
-    ON photos (substr(taken_at, 1, 10));
-";
+CREATE INDEX idx_photos_day ON photos (substr(taken_at, 1, 10));
+"];
 
 impl Db {
     /// Internal helper that builds a migrated `Db`.
     fn from_conn(conn: Connection) -> Result<Self> {
-        conn.execute_batch(SCHEMA)?;
+        Self::migrate(&conn)?;
         Ok(Self { conn })
+    }
+
+    /// Applies pending migrations based on `PRAGMA user_version` and stamps the new version.
+    fn migrate(conn: &Connection) -> Result<()> {
+        let current: i64 = conn.query_row("PRAGMA user_version", [], |r| r.get(0))?;
+        for (i, sql) in MIGRATIONS.iter().enumerate() {
+            let target = (i + 1) as i64;
+            if current < target {
+                conn.execute_batch(sql)?;
+                // pragma_update writes the new user_version (PRAGMA can't take a bound param).
+                conn.pragma_update(None, "user_version", target)?;
+            }
+        }
+        Ok(())
     }
 
     /// Opens the file (creating it if absent) and applies migrations.
@@ -65,23 +88,27 @@ impl Db {
         Self::from_conn(conn)
     }
 
-    /// Registers a folder (returns its id if it already exists).
-    pub fn upsert_folder(&self, path: &str) -> Result<i64> {
-        // Already present: return its id without inserting again.
-        if let Some(id) = self
+    /// Current schema version (`PRAGMA user_version`). Exposed for tests.
+    pub fn user_version(&self) -> Result<i64> {
+        Ok(self
+            .conn
+            .query_row("PRAGMA user_version", [], |r| r.get(0))?)
+    }
+
+    /// Registers a folder (or returns the existing id) and records `scanned_at` as its
+    /// `last_scan`. Called at the start of every import so `last_scan` reflects real activity.
+    pub fn upsert_folder(&self, path: &str, scanned_at: &str) -> Result<i64> {
+        self.conn.execute(
+            "INSERT INTO folders (path, added_at, last_scan) VALUES (?1, ?2, ?2)
+             ON CONFLICT(path) DO UPDATE SET last_scan = excluded.last_scan",
+            params![path, scanned_at],
+        )?;
+        let id = self
             .conn
             .query_row("SELECT id FROM folders WHERE path = ?1", [path], |r| {
                 r.get::<_, i64>(0)
-            })
-            .optional()?
-        {
-            return Ok(id);
-        }
-        self.conn.execute(
-            "INSERT INTO folders (path, added_at) VALUES (?1, datetime('now'))",
-            [path],
-        )?;
-        Ok(self.conn.last_insert_rowid())
+            })?;
+        Ok(id)
     }
 
     /// Whether a photo with this original_hash is already imported (incremental scan).
@@ -99,8 +126,8 @@ impl Db {
         self.conn.execute(
             "INSERT INTO photos (
                 store_path, store_bytes, thumb_path, taken_at, lat, lng,
-                width, height, original_filename, original_hash, place, imported_at
-            ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12)",
+                width, height, original_filename, original_hash, place, imported_at, folder_id
+            ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13)",
             params![
                 p.store_path,
                 p.store_bytes,
@@ -114,6 +141,7 @@ impl Db {
                 p.original_hash,
                 p.place,
                 p.imported_at,
+                p.folder_id,
             ],
         )?;
         Ok(self.conn.last_insert_rowid())
@@ -267,6 +295,7 @@ mod tests {
             original_hash: hash.to_string(),
             place: Some("Tokyo".to_string()),
             imported_at: "2026-01-01T00:00:00".to_string(),
+            folder_id: None,
         }
     }
 
@@ -283,13 +312,88 @@ mod tests {
     }
 
     #[test]
+    fn fresh_db_is_stamped_at_schema_v1() {
+        // The migration scaffold applies v1 and records it via PRAGMA user_version.
+        let db = Db::open_in_memory().unwrap();
+        assert_eq!(db.user_version().unwrap(), 1);
+    }
+
+    #[test]
+    fn reopen_does_not_reapply_migrations() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("photo-diary.db");
+        {
+            let db = Db::open(&path).unwrap();
+            assert_eq!(db.user_version().unwrap(), 1);
+        }
+        // Reopening an already-v1 database is a no-op and stays at v1.
+        let db = Db::open(&path).unwrap();
+        assert_eq!(db.user_version().unwrap(), 1);
+    }
+
+    #[test]
     fn upsert_folder_is_idempotent_by_path() {
         let db = Db::open_in_memory().unwrap();
-        let id1 = db.upsert_folder("/photos/a").unwrap();
-        let id2 = db.upsert_folder("/photos/a").unwrap();
+        let id1 = db
+            .upsert_folder("/photos/a", "2026-07-04T10:00:00")
+            .unwrap();
+        let id2 = db
+            .upsert_folder("/photos/a", "2026-07-05T10:00:00")
+            .unwrap();
         assert_eq!(id1, id2);
-        let id3 = db.upsert_folder("/photos/b").unwrap();
+        let id3 = db
+            .upsert_folder("/photos/b", "2026-07-04T10:00:00")
+            .unwrap();
         assert_ne!(id1, id3);
+    }
+
+    #[test]
+    fn upsert_folder_updates_last_scan_on_reimport() {
+        let db = Db::open_in_memory().unwrap();
+        db.upsert_folder("/photos/a", "2026-07-04T10:00:00")
+            .unwrap();
+        db.upsert_folder("/photos/a", "2026-07-09T18:30:00")
+            .unwrap();
+        let folders = db.list_folders().unwrap();
+        assert_eq!(folders.len(), 1);
+        assert_eq!(folders[0].last_scan, "2026-07-09T18:30:00");
+    }
+
+    #[test]
+    fn folder_id_round_trips_and_drives_list_folders_counts() {
+        let db = Db::open_in_memory().unwrap();
+        let fa = db
+            .upsert_folder("/photos/a", "2026-07-04T10:00:00")
+            .unwrap();
+        let fb = db
+            .upsert_folder("/photos/b", "2026-07-04T10:00:00")
+            .unwrap();
+
+        let mut p1 = sample_photo("h1", "2026-07-04T09:00:00");
+        p1.folder_id = Some(fa);
+        let mut p2 = sample_photo("h2", "2026-07-04T10:00:00");
+        p2.folder_id = Some(fa);
+        let mut p3 = sample_photo("h3", "2026-07-05T11:00:00");
+        p3.folder_id = Some(fb);
+        db.insert_photo(&p1).unwrap();
+        db.insert_photo(&p2).unwrap();
+        db.insert_photo(&p3).unwrap();
+
+        let folders = db.list_folders().unwrap();
+        let count = |id: i64| folders.iter().find(|f| f.id == id).unwrap().photo_count;
+        assert_eq!(count(fa), 2, "folder a owns two photos");
+        assert_eq!(count(fb), 1, "folder b owns one photo");
+    }
+
+    #[test]
+    fn list_folders_reports_zero_for_empty_folder() {
+        let db = Db::open_in_memory().unwrap();
+        db.upsert_folder("/photos/empty", "2026-07-04T10:00:00")
+            .unwrap();
+        let folders = db.list_folders().unwrap();
+        assert_eq!(folders.len(), 1);
+        assert_eq!(folders[0].photo_count, 0, "no photos -> count 0, not NULL");
+        assert_eq!(folders[0].last_scan, "2026-07-04T10:00:00");
     }
 
     #[test]

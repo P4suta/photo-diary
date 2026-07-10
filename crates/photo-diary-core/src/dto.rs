@@ -4,6 +4,7 @@
 
 use crate::model::PhotoRow;
 use serde::Serialize;
+use std::path::Path;
 
 #[derive(Debug, Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -18,7 +19,8 @@ pub struct PhotoDto {
     pub width: u32,
     pub height: u32,
     pub megapixels: f64,
-    /// File path of the display thumbnail (frontend: convertFileSrc -> thumbUrl)
+    /// Absolute file path of the display thumbnail (frontend: convertFileSrc -> thumbUrl).
+    /// Stored relative in the DB; joined with the current data dir here.
     pub thumb_path: Option<String>,
     pub size_bytes: i64,
     pub format: String,
@@ -29,9 +31,14 @@ pub struct PhotoDto {
     pub lng: Option<f64>,
 }
 
-impl From<PhotoRow> for PhotoDto {
-    fn from(r: PhotoRow) -> Self {
+impl PhotoDto {
+    /// Builds a DTO from a DB row, resolving the DB-relative `thumb_path` against `data_dir`
+    /// so the IPC surface carries an ABSOLUTE path (the frontend's convertFileSrc needs it).
+    pub fn from_row(r: PhotoRow, data_dir: &Path) -> Self {
         let megapixels = ((r.width as f64 * r.height as f64) / 100_000.0).round() / 10.0;
+        let thumb_path = r
+            .thumb_path
+            .map(|rel| data_dir.join(rel).to_string_lossy().into_owned());
         PhotoDto {
             id: r.id.to_string(),
             aspect: aspect_of(r.width, r.height),
@@ -42,7 +49,7 @@ impl From<PhotoRow> for PhotoDto {
             width: r.width,
             height: r.height,
             megapixels,
-            thumb_path: r.thumb_path,
+            thumb_path,
             size_bytes: r.store_bytes,
             format: "AVIF".to_string(),
             quality: "Visually lossless".to_string(),

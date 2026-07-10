@@ -15,6 +15,7 @@ pub fn read_meta(path: &Path) -> Result<PhotoMeta> {
     let (width, height) = image::image_dimensions(path)?;
 
     let (mut taken_at, mut lat, mut lng) = (None, None, None);
+    let mut orientation = 1u16;
 
     // EXIF is often missing/corrupt, so still return dimensions even if it fails.
     let file = std::fs::File::open(path)?;
@@ -29,19 +30,17 @@ pub fn read_meta(path: &Path) -> Result<PhotoMeta> {
             taken_at = parse_exif_datetime(&raw);
         }
 
-        // GPS latitude/longitude.
-        lat = read_gps(
-            &ex,
-            Tag::GPSLatitude,
-            Tag::GPSLatitudeRef,
-            b'S', // Southern hemisphere is negative.
-        );
-        lng = read_gps(
-            &ex,
-            Tag::GPSLongitude,
-            Tag::GPSLongitudeRef,
-            b'W', // Western longitude is negative.
-        );
+        // GPS latitude/longitude (latitude bounded to +-90, longitude to +-180).
+        lat = read_gps(&ex, Tag::GPSLatitude, Tag::GPSLatitudeRef, b'S', 90.0);
+        lng = read_gps(&ex, Tag::GPSLongitude, Tag::GPSLongitudeRef, b'W', 180.0);
+
+        // Orientation tag (1-8). Absent/unreadable -> 1 (upright).
+        if let Some(v) = ex
+            .get_field(Tag::Orientation, In::PRIMARY)
+            .and_then(|f| f.value.get_uint(0))
+        {
+            orientation = v as u16;
+        }
     }
 
     Ok(PhotoMeta {
@@ -50,6 +49,7 @@ pub fn read_meta(path: &Path) -> Result<PhotoMeta> {
         lng,
         width,
         height,
+        orientation,
     })
 }
 
@@ -98,28 +98,48 @@ fn parse_exif_datetime(raw: &str) -> Option<String> {
 /// Converts a GPS coordinate from DMS + directional reference to decimal degrees.
 ///
 /// `neg_ref` is the single byte for the direction that should be negative (latitude `b'S'`, longitude `b'W'`).
-fn read_gps(ex: &exif::Exif, coord_tag: Tag, ref_tag: Tag, neg_ref: u8) -> Option<f64> {
+/// `max_abs` bounds the valid magnitude (90 for latitude, 180 for longitude).
+fn read_gps(
+    ex: &exif::Exif,
+    coord_tag: Tag,
+    ref_tag: Tag,
+    neg_ref: u8,
+    max_abs: f64,
+) -> Option<f64> {
     let coord = ex.get_field(coord_tag, In::PRIMARY)?;
     let dms = match &coord.value {
-        Value::Rational(r) if r.len() == 3 => r,
+        Value::Rational(r) => r.as_slice(),
         _ => return None,
     };
 
-    let deg = dms[0].to_f64();
-    let min = dms[1].to_f64();
-    let sec = dms[2].to_f64();
-    let mut decimal = deg + min / 60.0 + sec / 3600.0;
+    let is_negative = ex
+        .get_field(ref_tag, In::PRIMARY)
+        .and_then(|field| ascii_first(&field.value))
+        .and_then(|r| r.bytes().next())
+        .map(|b| b.eq_ignore_ascii_case(&neg_ref))
+        == Some(true);
 
-    // Directional reference: negate for S/W.
-    if let Some(field) = ex.get_field(ref_tag, In::PRIMARY) {
-        if let Some(r) = ascii_first(&field.value) {
-            if r.bytes().next().map(|b| b.eq_ignore_ascii_case(&neg_ref)) == Some(true) {
-                decimal = -decimal;
-            }
-        }
+    dms_to_decimal(dms, is_negative, max_abs)
+}
+
+/// Pure DMS-to-decimal conversion with sanity guards. Returns `None` for malformed input:
+/// wrong arity, zero-denominator rationals, non-finite results, or magnitudes exceeding
+/// `max_abs`. Kept separate from EXIF access so it can be unit-tested directly.
+fn dms_to_decimal(dms: &[exif::Rational], is_negative: bool, max_abs: f64) -> Option<f64> {
+    if dms.len() != 3 {
+        return None;
+    }
+    // A zero denominator would yield inf/NaN; reject rather than store garbage coordinates.
+    if dms.iter().any(|r| r.denom == 0) {
+        return None;
     }
 
-    Some(decimal)
+    let decimal = dms[0].to_f64() + dms[1].to_f64() / 60.0 + dms[2].to_f64() / 3600.0;
+    if !decimal.is_finite() || decimal > max_abs {
+        return None;
+    }
+
+    Some(if is_negative { -decimal } else { decimal })
 }
 
 #[cfg(test)]
@@ -158,6 +178,8 @@ mod tests {
         assert_eq!(meta.taken_at, None);
         assert_eq!(meta.lat, None);
         assert_eq!(meta.lng, None);
+        // Absent Orientation tag defaults to 1 (upright); locks the field against refactors.
+        assert_eq!(meta.orientation, 1);
     }
 
     #[test]
@@ -192,6 +214,36 @@ mod tests {
             parse_exif_datetime("  2001:01:02 03:04:05\0 ").as_deref(),
             Some("2001-01-02T03:04:05")
         );
+    }
+
+    fn r(num: u32, denom: u32) -> exif::Rational {
+        exif::Rational { num, denom }
+    }
+
+    #[test]
+    fn dms_rejects_zero_denominator() {
+        // 35 / 0 deg -> would be inf; must be rejected, not stored.
+        let dms = [r(35, 0), r(41, 1), r(0, 1)];
+        assert_eq!(dms_to_decimal(&dms, false, 90.0), None);
+    }
+
+    #[test]
+    fn dms_converts_and_negates() {
+        // 35 deg 30 min 0 sec = 35.5; negated for S/W.
+        let dms = [r(35, 1), r(30, 1), r(0, 1)];
+        assert_eq!(dms_to_decimal(&dms, false, 90.0), Some(35.5));
+        assert_eq!(dms_to_decimal(&dms, true, 90.0), Some(-35.5));
+    }
+
+    #[test]
+    fn dms_rejects_out_of_range_and_wrong_arity() {
+        // Latitude beyond +-90.
+        assert_eq!(
+            dms_to_decimal(&[r(200, 1), r(0, 1), r(0, 1)], false, 90.0),
+            None
+        );
+        // Not exactly three components.
+        assert_eq!(dms_to_decimal(&[r(35, 1), r(30, 1)], false, 90.0), None);
     }
 
     #[test]
