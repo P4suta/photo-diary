@@ -5,6 +5,7 @@ import type { Locale } from '@/app/i18n'
 import { useFolders, useStats } from '@/app/queries'
 import { type Accent, type ThemeMode, useTheme } from '@/app/theme'
 import type { WatchedFolder } from '@/domain/models'
+import { formatImportedAt } from '@/lib/datetime'
 import { formatBytes, formatCount, splitBytes } from '@/lib/format'
 import { Button } from '@/ui/Button'
 import { ErrorPanel } from '@/ui/ErrorPanel'
@@ -171,9 +172,11 @@ export function SettingsView() {
 }
 
 function FolderRow({ folder }: { folder: WatchedFolder }) {
-  const { t } = useTranslation()
+  const { t, i18n } = useTranslation()
   const state = folder.status === 'watching' ? t('settings.watching') : t('settings.disconnected')
-  const status = `${state} · ${t('settings.lastScan', { time: folder.lastScan })} · ${t('unit.photo', { count: folder.photoCount })}`
+  // lastScan is a raw ISO timestamp (empty until first scan); format for display.
+  const scan = folder.lastScan ? formatImportedAt(folder.lastScan, i18n.language) : '—'
+  const status = `${state} · ${t('settings.lastScan', { time: scan })} · ${t('unit.photo', { count: folder.photoCount })}`
   return (
     <div className="flex items-center gap-3 px-4 py-3 bg-card">
       <FolderIcon className="w-4 h-4 text-muted-foreground shrink-0" />

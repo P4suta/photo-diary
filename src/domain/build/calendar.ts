@@ -7,15 +7,7 @@
  * new Date(year, monthIndex, day) (never uses "now").
  */
 import type { MonthCell } from '@/domain/calendar'
-
-/** Photo count → level bucket (0..4). 0=0, 1-2=1, 3-5=2, 6-10=3, 11+=4. */
-function bucket(count: number): number {
-  if (count <= 0) return 0
-  if (count <= 2) return 1
-  if (count <= 5) return 2
-  if (count <= 10) return 3
-  return 4
-}
+import { heatLevel } from '@/domain/heat-level'
 
 export function buildMonthCells(
   year: number,
@@ -57,7 +49,7 @@ export function buildMonthCells(
       blank: false,
       day: d,
       count: rec.count,
-      level: rec.count > 0 ? bucket(rec.count) : -1,
+      level: rec.count > 0 ? heatLevel(rec.count) : -1,
       hasNote: rec.hasNote,
       isToday,
       isFuture,

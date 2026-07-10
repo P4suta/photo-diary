@@ -48,14 +48,17 @@ test('the sidebar navigates to calendar, highlights, and settings', async ({ pag
   await expect(page).toHaveURL(/\/settings$/)
 })
 
-test('clicking a note enters inline edit and accepts input', async ({ page }) => {
-  // Click an existing note → it becomes a textarea (prefilled) → can be overwritten.
-  // (The post-save re-render does not fire under the phase-1 mock, which returns the
-  // same array reference; the save call itself is covered by NoteEditor's unit test.)
-  await page.getByText('Yoyogi Park in the morning. It was cool around the fountain.').click()
+test('editing a note saves and the feed re-renders with the new text', async ({ page }) => {
+  const original = 'Yoyogi Park in the morning. It was cool around the fountain.'
+  // Click an existing note → it becomes a textarea (prefilled) → overwrite → commit.
+  await page.getByText(original).click()
   const editor = page.getByPlaceholder('A few lines about today.').first()
   await expect(editor).toBeVisible()
-  await expect(editor).toHaveValue('Yoyogi Park in the morning. It was cool around the fountain.')
+  await expect(editor).toHaveValue(original)
   await editor.fill('an edited note for the day')
-  await expect(editor).toHaveValue('an edited note for the day')
+  // Ctrl+Enter commits (NoteEditor) → saveNote → query invalidation → refetch.
+  await editor.press('Control+Enter')
+  // The mock upserts immutably, so the feed actually re-renders: new text in, old text gone.
+  await expect(page.getByText('an edited note for the day')).toBeVisible()
+  await expect(page.getByText(original)).toBeHidden()
 })

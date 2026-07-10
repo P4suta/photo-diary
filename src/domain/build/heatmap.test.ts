@@ -90,12 +90,15 @@ describe('buildHeatWeeks', () => {
     }
   })
 
-  it('leap year (2028): Feb 29 appears in range', () => {
+  it('leap year (2028): 54 weeks so Dec 31 is not dropped', () => {
     const weeks = buildHeatWeeks(2028, [{ date: '2028-02-29', count: 7 }], '2028-12-31')
-    // 2028-01-01 is a Saturday (getDay()=6) → offset=6.
+    // 2028-01-01 is a Saturday (getDay()=6) → offset=6, 366 days.
+    // ceil((6 + 366) / 7) = 54 weeks (a fixed 53 lost Dec 31).
+    expect(weeks).toHaveLength(54)
     // Feb 29 day-of-year index = 31 + 28 = 59 (0-based). grid=59+6=65 → w9,d2.
     expect(cellAt(weeks, 9, 2)).toMatchObject({ level: 3, count: 7 }) // 7 → bucket 3
-    const last = cellAt(weeks, 52, 6) // idx = 52*7+6-6 = 364 (Dec 30), in range level 0
-    expect(last.level).toBe(0)
+    // Dec 31 idx=365 → grid=371 → w53,d0. Present and in range (would be dropped at 53 weeks).
+    expect(cellAt(weeks, 53, 0)).toMatchObject({ level: 0, count: 0 })
+    expect(cellAt(weeks, 52, 6).level).toBe(0) // Dec 30 (idx 364), still in range
   })
 })

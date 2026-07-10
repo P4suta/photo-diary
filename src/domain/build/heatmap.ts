@@ -6,15 +6,8 @@
  * No side effects, no "now" (today comes in as todayIso). Deterministic.
  */
 
+import { heatLevel } from '@/domain/heat-level'
 import type { HeatCell, HeatWeek } from '@/domain/heatmap'
-
-/** count → level bucket (1..4). Zero counts get 0 assigned by the caller. */
-function bucket(count: number): number {
-  if (count <= 2) return 1
-  if (count <= 5) return 2
-  if (count <= 10) return 3
-  return 4
-}
 
 /** Gregorian leap-year test. */
 function isLeapYear(year: number): boolean {
@@ -30,7 +23,7 @@ function toIsoDate(d: Date): string {
 }
 
 /**
- * Build the full 53-week heatmap for `year`.
+ * Build the full heatmap for `year`.
  *
  * - countsMap: date('YYYY-MM-DD') → count.
  * - offset: weekday of Jan 1 (Sunday=0). Leading blank days in the grid.
@@ -67,8 +60,13 @@ export function buildHeatWeeks(
     todayIdx = -1 // all future
   }
 
+  // Enough weeks to hold `offset` leading blanks + every day of the year. A fixed 53
+  // dropped Dec 31 of a leap year that starts on Saturday (2028: offset 6 + 366 days
+  // → 54 weeks); ceil makes the grid grow to fit any year.
+  const weekCount = Math.ceil((offset + daysInYear) / 7)
+
   const weeks: HeatWeek[] = []
-  for (let w = 0; w < 53; w++) {
+  for (let w = 0; w < weekCount; w++) {
     const days: HeatCell[] = []
     for (let d = 0; d < 7; d++) {
       const idx = w * 7 + d - offset
@@ -80,7 +78,7 @@ export function buildHeatWeeks(
       } else {
         const date = toIsoDate(new Date(year, 0, 1 + idx))
         count = countsMap[date] ?? 0
-        level = count === 0 ? 0 : bucket(count)
+        level = heatLevel(count)
       }
       days.push({ key: `w${w}d${d}`, level, count })
     }

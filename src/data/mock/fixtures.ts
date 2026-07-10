@@ -173,7 +173,8 @@ export const stats: LibraryStats = {
   starredCount: 312,
   location: '~/Library/Application Support/photo-diary/library',
   thumbnailCacheBytes: 671_088_640, // 640 MB
-  lastImport: '14:02',
+  // Raw ISO timestamp (as the Rust backend returns MAX(imported_at)); the UI formats it.
+  lastImport: '2026-07-05T14:02:00',
 }
 
 export const folders: WatchedFolder[] = [
@@ -181,14 +182,15 @@ export const folders: WatchedFolder[] = [
     id: 'f1',
     path: '~/Pictures/iPhone Import',
     status: 'watching',
-    lastScan: '3 min ago',
+    // Raw ISO timestamp (as the Rust backend stores folders.last_scan); the UI formats it.
+    lastScan: '2026-07-05T13:59:00',
     photoCount: 7842,
   },
   {
     id: 'f2',
     path: '/Volumes/SDCARD/DCIM',
     status: 'disconnected',
-    lastScan: 'Jun 28',
+    lastScan: '2026-06-28T09:12:00',
     photoCount: 372,
   },
 ]
@@ -200,10 +202,43 @@ export const placeFacets: PlaceFacet[] = [
   { label: 'No location', count: 2410, selected: false, muted: true },
 ]
 
-/** Calendar month-grid records (July 2026). */
-export const julyRecords = {
-  1: { count: 0, level: 0, hasNote: true },
-  2: { count: 5, level: 2, hasNote: false },
-  4: { count: 6, level: 3, hasNote: true },
-  5: { count: 4, level: 2, hasNote: true },
-} as const
+/**
+ * Calendar month-grid records (July 2026) as the raw per-day shape the backend returns
+ * — `buildMonthCells` derives the heat level from `count`, so no level is stored here.
+ */
+export const julyRecords: { day: number; count: number; hasNote: boolean }[] = [
+  { day: 1, count: 0, hasNote: true }, // note but no photos
+  { day: 2, count: 5, hasNote: false },
+  { day: 4, count: 6, hasNote: true },
+  { day: 5, count: 4, hasNote: true }, // today
+]
+
+/** 'YYYY-MM-DD' from local date parts (matches buildHeatWeeks' own local lookup). */
+function isoDay(d: Date): string {
+  const y = d.getFullYear()
+  const m = `${d.getMonth() + 1}`.padStart(2, '0')
+  const day = `${d.getDate()}`.padStart(2, '0')
+  return `${y}-${m}-${day}`
+}
+
+/**
+ * Sample daily photo counts for the 2026 year heatmap (Jan 1 → today, 07-05). This is
+ * mock sample data living where mock data belongs — `buildHeatWeeks` turns it into the
+ * grid, so the mock and the real backend share the exact same derivation path.
+ */
+export const heatCounts: { date: string; count: number }[] = (() => {
+  const pattern = [0, 2, 0, 5, 0, 0, 8, 1, 0, 3, 0, 12, 4, 0, 0, 6, 0, 2, 0, 9]
+  const today = new Date(2026, 6, 5) // Jul 5, 2026 — the mock's "today"
+  const out: { date: string; count: number }[] = []
+  for (let idx = 0; ; idx++) {
+    const d = new Date(2026, 0, 1 + idx)
+    if (d > today) break
+    const count = pattern[idx % pattern.length]
+    if (count > 0) out.push({ date: isoDay(d), count })
+  }
+  return out
+})()
+
+/** The mock's fixed "today", shared by getMonth/getHeatmap. */
+export const MOCK_TODAY = { year: 2026, month: 7, day: 5 } as const
+export const MOCK_TODAY_ISO = '2026-07-05'

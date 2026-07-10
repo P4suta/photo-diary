@@ -2,6 +2,7 @@ import { useTranslation } from 'react-i18next'
 import { NavLink } from 'react-router-dom'
 import { useStats } from '@/app/queries'
 import { cn } from '@/lib/cn'
+import { formatImportedAt } from '@/lib/datetime'
 import { formatBytes } from '@/lib/format'
 import { CalendarIcon, SettingsIcon, TimelineIcon } from '@/ui/icons'
 
@@ -20,8 +21,10 @@ const NAV: NavItem[] = [
 ]
 
 export function Sidebar() {
-  const { t } = useTranslation()
+  const { t, i18n } = useTranslation()
   const { data: stats } = useStats()
+  // lastImport is a raw ISO timestamp (empty when nothing imported yet); format for display.
+  const lastImport = stats?.lastImport ? formatImportedAt(stats.lastImport, i18n.language) : '—'
   return (
     <aside className="w-[216px] shrink-0 border-r border-border flex flex-col p-3">
       <div className="flex items-center gap-2.5 px-3 py-2.5">
@@ -63,7 +66,7 @@ export function Sidebar() {
           <div className="font-mono text-[10px] leading-5 text-muted-foreground">
             {t('unit.photo', { count: stats.photoCount })} · {formatBytes(stats.usedBytes)}
             <br />
-            {t('sidebar.lastImport', { time: stats.lastImport })}
+            {t('sidebar.lastImport', { time: lastImport })}
           </div>
         </div>
       )}
