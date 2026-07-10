@@ -136,13 +136,16 @@
   },
   "import": {
     "importing": "Importing · {{done}} / {{total}}",
-    "optimizing": "Optimizing copies · about {{minutes}} min left",
-    "close": "Close",
+    "preparing": "Preparing…",
     "importingCount": "Importing {{count, number}} photos",
     "body": "Copying into the diary library while optimizing to full-resolution AVIF. Originals are not modified.",
-    "remaining": "about {{minutes}} min left",
-    "saved": "Saved so far: {{from}} → {{to}}",
-    "pause": "Pause",
     "continueBackground": "Continue in background"
+  },
+  "errors": {
+    "loadTitle": "Couldn't load",
+    "loadBody": "Something went wrong reading your library.",
+    "retry": "Try again",
+    "loadFailed": "Couldn't load your library. Please try again.",
+    "dismiss": "Dismiss"
   }
 }

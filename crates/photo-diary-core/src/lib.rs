@@ -15,4 +15,4 @@ pub mod transcode;
 pub mod views;
 
 pub use error::{Error, Result};
-pub use library::{ImportFailure, ImportSummary, Library};
+pub use library::{ImportFailure, ImportProgress, ImportSummary, Library};

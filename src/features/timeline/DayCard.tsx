@@ -57,7 +57,11 @@ function NoteOnlyCard({ day }: { day: Extract<DayEntry, { kind: 'note_only' }> }
           </span>
         }
       />
-      <p className="text-[15px] leading-7 mt-2.5">{day.note}</p>
+      {/* Editable so a photo-less day — including the always-present today card — can
+          still take a note (the concept's core: capture a day even without photos). */}
+      <div className="mt-2.5">
+        <NoteEditor date={day.date} note={day.note === '' ? null : day.note} />
+      </div>
     </article>
   )
 }

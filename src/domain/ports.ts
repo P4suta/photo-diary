@@ -1,6 +1,14 @@
 import type { MonthCell } from './calendar'
 import type { HeatWeek } from './heatmap'
-import type { DayEntry, HighlightsData, LibraryStats, PlaceFacet, WatchedFolder } from './models'
+import type {
+  DayEntry,
+  HighlightsData,
+  ImportProgress,
+  ImportResult,
+  LibraryStats,
+  PlaceFacet,
+  WatchedFolder,
+} from './models'
 
 /**
  * The backend seam (port). The UI depends only on this interface.
@@ -9,10 +17,10 @@ import type { DayEntry, HighlightsData, LibraryStats, PlaceFacet, WatchedFolder 
 export interface PhotoLibrary {
   /** Timeline (today first, reverse chronological) */
   listTimeline(): Promise<DayEntry[]>
-  /** Calendar month grid (fixed to July 2026 in phase 1) */
-  getMonth(): Promise<MonthCell[]>
-  /** Annual heatmap */
-  getHeatmap(): Promise<HeatWeek[]>
+  /** Calendar month grid for the given year and 1-based month */
+  getMonth(year: number, month: number): Promise<MonthCell[]>
+  /** Annual heatmap for the given year */
+  getHeatmap(year: number): Promise<HeatWeek[]>
   /** Starred highlights */
   getHighlights(): Promise<HighlightsData>
   getStats(): Promise<LibraryStats>
@@ -21,6 +29,8 @@ export interface PhotoLibrary {
   listPlaceFacets(): Promise<PlaceFacet[]>
 
   // --- mutations ---
+  /** Import a folder; `onProgress` (optional) fires once per processed file. */
+  importFolder(path: string, onProgress?: (p: ImportProgress) => void): Promise<ImportResult>
   saveNote(date: string, note: string): Promise<void>
   toggleStar(photoId: string): Promise<void>
 }

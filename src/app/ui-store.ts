@@ -1,5 +1,5 @@
 import { create } from 'zustand'
-import type { Photo } from '@/domain/models'
+import type { ImportProgress, Photo } from '@/domain/models'
 
 interface LightboxState {
   photos: Photo[]
@@ -19,6 +19,14 @@ interface UiStore {
 
   importState: ImportState
   setImportState: (state: ImportState) => void
+  /** Live per-file progress of the running import (null before the first tick). */
+  importProgress: ImportProgress | null
+  setImportProgress: (progress: ImportProgress | null) => void
+
+  /** i18n key of a transient error toast (null = hidden). */
+  toastKey: string | null
+  showToast: (key: string) => void
+  dismissToast: () => void
 }
 
 export const useUi = create<UiStore>((set) => ({
@@ -43,4 +51,10 @@ export const useUi = create<UiStore>((set) => ({
 
   importState: 'closed',
   setImportState: (importState) => set({ importState }),
+  importProgress: null,
+  setImportProgress: (importProgress) => set({ importProgress }),
+
+  toastKey: null,
+  showToast: (toastKey) => set({ toastKey }),
+  dismissToast: () => set({ toastKey: null }),
 }))

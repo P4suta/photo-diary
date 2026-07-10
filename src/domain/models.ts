@@ -22,6 +22,8 @@ export interface Photo {
   megapixels: number
   /** Display thumbnail URL (Tauri: convertFileSrc; mock: unset → .ph placeholder). */
   thumbUrl?: string
+  /** Full-resolution AVIF master URL (Tauri: convertFileSrc of store_path; mock: unset). */
+  fullUrl?: string
   /** Stored size in the internal library (AVIF, bytes). */
   sizeBytes: number
   format: string
@@ -121,4 +123,29 @@ export interface PlaceFacet {
   count: number
   selected: boolean
   muted?: boolean
+}
+
+/** One file that failed to import (the rest of the folder still imported). */
+export interface ImportFailure {
+  path: string
+  reason: string
+}
+
+/** Result of importing a folder (matches the Rust core's ImportSummary). */
+export interface ImportResult {
+  imported: number
+  skipped: number
+  /** Recognized-but-undecodable files (heic/heif/avif) skipped by policy. */
+  skippedUnsupported: number
+  /** Total originals − total stored (AVIF); can be negative. */
+  bytesSaved: number
+  failed: ImportFailure[]
+  scanErrors: string[]
+}
+
+/** Progress for one processed file during an import (emitted per file). */
+export interface ImportProgress {
+  current: number
+  total: number
+  filename: string
 }

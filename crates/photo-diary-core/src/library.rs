@@ -1,10 +1,12 @@
 use crate::db::Db;
 use crate::model::{NewPhoto, Stats};
 use crate::{exif, orient, scan, thumbnail, transcode, Result};
+use serde::Serialize;
 use sha2::{Digest, Sha256};
 use std::fs;
 use std::io::Read;
 use std::path::{Path, PathBuf};
+use std::sync::{Mutex, MutexGuard};
 use std::time::{SystemTime, UNIX_EPOCH};
 use time::UtcOffset;
 
@@ -32,6 +34,18 @@ pub struct ImportSummary {
     pub scan_errors: Vec<String>,
 }
 
+/// Progress for one processed file during an import. Emitted through a caller-supplied callback
+/// so the core stays framework-free (the Tauri layer forwards these over an IPC channel). serde is
+/// camelCase to match the rest of the DTO surface. `current` counts files processed so far
+/// (1..=`total`); `total` is the number of scanned candidate images.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ImportProgress {
+    pub current: u32,
+    pub total: u32,
+    pub filename: String,
+}
+
 /// Per-file outcome of an import attempt.
 enum ImportOutcome {
     /// Newly imported; carries bytes saved vs the original.
@@ -43,7 +57,10 @@ enum ImportOutcome {
 /// Facade over the internal library. Optimizes watched-folder photos to AVIF for permanent
 /// storage and records metadata in SQLite. The Tauri command layer just calls this thin wrapper.
 pub struct Library {
-    db: Db,
+    /// The DB connection, behind a Mutex so the lock is held only around each brief DB access
+    /// (not across the CPU-heavy hash/decode/AVIF encode work). This keeps a concurrent read from
+    /// waiting on a whole import — it contends only with one file's exists-check or insert.
+    db: Mutex<Db>,
     /// Root data directory. Stored so DB-relative paths (`library/…`, `thumbnails/…`) can be
     /// re-joined to absolute paths when producing DTOs.
     data_dir: PathBuf,
@@ -71,7 +88,7 @@ impl Library {
         // of formatting local EXIF times against a UTC fallback. Falls back to UTC if unavailable.
         let offset = UtcOffset::current_local_offset().unwrap_or(UtcOffset::UTC);
         Ok(Self {
-            db,
+            db: Mutex::new(db),
             data_dir: data_dir.to_path_buf(),
             store,
             thumbs,
@@ -82,12 +99,26 @@ impl Library {
     /// Scans a folder and, for not-yet-imported photos (no matching original_hash), converts
     /// them to AVIF, then stores and registers them. Already-imported ones are skipped (incremental import).
     pub fn import_folder(&self, folder: &Path) -> Result<ImportSummary> {
+        self.import_folder_with_progress(folder, &|_| {})
+    }
+
+    /// Like [`Self::import_folder`], but invokes `on_progress` once per processed file so a caller
+    /// (the Tauri layer) can forward live progress over an IPC channel. The callback is `Fn`, not a
+    /// framework type, so the core stays independent of Tauri. `total` is the number of scanned
+    /// candidate images; `current` runs 1..=`total` and counts every file processed (imported,
+    /// duplicate, or failed) so the bar reaches completion regardless of per-file outcome.
+    pub fn import_folder_with_progress(
+        &self,
+        folder: &Path,
+        on_progress: &dyn Fn(ImportProgress),
+    ) -> Result<ImportSummary> {
         // Register the folder and record this scan time; the returned id tags each photo.
         let folder_id = self
-            .db
+            .db()
             .upsert_folder(&folder.to_string_lossy(), &iso_local(now(), self.offset))?;
 
         let scan = scan::scan(folder)?;
+        let total = scan.images.len() as u32;
         let mut summary = ImportSummary {
             imported: 0,
             skipped: 0,
@@ -98,8 +129,8 @@ impl Library {
         };
 
         // A failure on one file must not abort the folder: collect it and keep going.
-        for src in scan.images {
-            match self.import_one(&src, folder_id) {
+        for (i, src) in scan.images.iter().enumerate() {
+            match self.import_one(src, folder_id) {
                 Ok(ImportOutcome::Imported(saved)) => {
                     summary.imported += 1;
                     summary.bytes_saved += saved;
@@ -110,6 +141,15 @@ impl Library {
                     reason: e.to_string(),
                 }),
             }
+            // Emit after the file is handled: `current` is the number of files completed so far.
+            on_progress(ImportProgress {
+                current: (i + 1) as u32,
+                total,
+                filename: src
+                    .file_name()
+                    .map(|s| s.to_string_lossy().into_owned())
+                    .unwrap_or_default(),
+            });
         }
 
         Ok(summary)
@@ -119,7 +159,9 @@ impl Library {
     /// can record it and continue with the rest of the folder.
     fn import_one(&self, src: &Path, folder_id: i64) -> Result<ImportOutcome> {
         let hash = file_hash(src)?;
-        if self.db.photo_exists(&hash)? {
+        // Brief lock: bind the result so the guard drops before the CPU-heavy decode/encode below.
+        let exists = self.db().photo_exists(&hash)?;
+        if exists {
             return Ok(ImportOutcome::Duplicate);
         }
 
@@ -149,7 +191,8 @@ impl Library {
         let orig_bytes = fs::metadata(src)?.len() as i64;
         let bytes_saved = orig_bytes - avif.bytes as i64;
 
-        self.db.insert_photo(&NewPhoto {
+        // Brief lock: only the insert touches the DB.
+        self.db().insert_photo(&NewPhoto {
             store_path: rel_store,
             store_bytes: avif.bytes as i64,
             thumb_path,
@@ -172,15 +215,15 @@ impl Library {
     }
 
     pub fn stats(&self) -> Result<Stats> {
-        self.db.stats()
+        self.db().stats()
     }
 
     pub fn save_note(&self, date: &str, note: &str) -> Result<()> {
-        self.db.set_note(date, note)
+        self.db().set_note(date, note)
     }
 
     pub fn toggle_star(&self, photo_id: i64) -> Result<bool> {
-        self.db.toggle_star(photo_id)
+        self.db().toggle_star(photo_id)
     }
 
     /// Internal storage directory (for the settings "open folder").
@@ -188,26 +231,31 @@ impl Library {
         &self.store
     }
 
-    /// Reference to the data layer (for the command layer's read queries that need no path join).
-    pub fn db(&self) -> &Db {
-        &self.db
+    /// Locks and returns the data layer. Each caller holds the guard only for its own brief DB
+    /// access — never across CPU or fs work (that would serialize reads behind an import). A
+    /// poisoned lock (a panic while some other call held it) is recovered: individual statements
+    /// leave the connection usable, so we take the guard rather than propagate the panic.
+    pub fn db(&self) -> MutexGuard<'_, Db> {
+        self.db.lock().unwrap_or_else(|e| e.into_inner())
     }
 
     /// All photos (taken_at descending), with thumb paths resolved to absolute.
     pub fn list_photos(&self) -> Result<Vec<crate::dto::PhotoDto>> {
-        self.db.all_photos(&self.data_dir)
+        self.db().all_photos(&self.data_dir)
     }
 
     /// Starred photos (taken_at descending), with thumb paths resolved to absolute.
     pub fn list_starred(&self) -> Result<Vec<crate::dto::PhotoDto>> {
-        self.db.starred_photos(&self.data_dir)
+        self.db().starred_photos(&self.data_dir)
     }
 
     /// Watched folders with real photo counts and last_scan, plus an fs-derived status. The
     /// fs check lives here (not in the Db, which stays fs-free): a folder whose path no longer
     /// exists is reported as `disconnected` so the UI can flag it.
     pub fn list_folders(&self) -> Result<Vec<crate::dto::FolderDto>> {
-        let rows = self.db.list_folders()?;
+        // Bind first so the DB guard drops before the per-folder `is_dir()` fs checks below
+        // (never hold the DB lock across filesystem IO).
+        let rows = self.db().list_folders()?;
         Ok(rows
             .into_iter()
             .map(|r| {
@@ -229,7 +277,12 @@ impl Library {
 
     /// Library stats for the UI (includes storage size, thumbnail cache size, last import).
     pub fn stats_full(&self) -> Result<crate::dto::StatsDto> {
-        let s = self.db.stats()?;
+        // Acquire the lock once (std Mutex is not reentrant) for both DB reads, then drop it
+        // before the `dir_size` fs walk — never hold the DB lock across filesystem IO.
+        let (s, last_import) = {
+            let db = self.db();
+            (db.stats()?, db.last_import()?.unwrap_or_default())
+        };
         Ok(crate::dto::StatsDto {
             used_bytes: s.used_bytes,
             photo_count: s.photo_count,
@@ -237,7 +290,7 @@ impl Library {
             starred_count: s.starred_count,
             thumbnail_cache_bytes: dir_size(&self.thumbs),
             location: self.store.to_string_lossy().into_owned(),
-            last_import: self.db.last_import()?.unwrap_or_default(),
+            last_import,
         })
     }
 }
@@ -319,7 +372,7 @@ mod tests {
         fs::create_dir_all(&store).unwrap();
         fs::create_dir_all(&thumbs).unwrap();
         Library {
-            db,
+            db: Mutex::new(db),
             data_dir: dir.to_path_buf(),
             store,
             thumbs,
@@ -411,6 +464,36 @@ mod tests {
     }
 
     #[test]
+    fn import_emits_progress_per_file_up_to_total() {
+        use std::cell::RefCell;
+        let dir = tempfile::tempdir().unwrap();
+        let lib = make_lib(dir.path());
+        let src = dir.path().join("in");
+        fs::create_dir_all(&src).unwrap();
+        write_png(&src.join("a.png"), 20, 20, 1);
+        write_png(&src.join("b.png"), 20, 20, 2);
+        // A heic is unsupported (excluded from candidates), so it must NOT count toward `total`.
+        fs::write(src.join("phone.heic"), b"nope").unwrap();
+
+        let events: RefCell<Vec<ImportProgress>> = RefCell::new(Vec::new());
+        lib.import_folder_with_progress(&src, &|p| events.borrow_mut().push(p))
+            .unwrap();
+
+        let events = events.into_inner();
+        // One event per scanned candidate image (the two pngs), heic excluded.
+        assert_eq!(events.len(), 2);
+        for e in &events {
+            assert_eq!(e.total, 2, "total is the candidate-image count");
+        }
+        // `current` runs 1..=total and reaches completion.
+        assert_eq!(events[0].current, 1);
+        assert_eq!(events[1].current, 2);
+        let mut names: Vec<&str> = events.iter().map(|e| e.filename.as_str()).collect();
+        names.sort_unstable();
+        assert_eq!(names, vec!["a.png", "b.png"]);
+    }
+
+    #[test]
     fn list_folders_status_reflects_filesystem_presence() {
         let dir = tempfile::tempdir().unwrap();
         let lib = make_lib(dir.path());
@@ -469,6 +552,17 @@ mod tests {
         assert!(
             Path::new(abs).is_absolute() && Path::new(abs).starts_with(dir.path()),
             "dto thumb_path is absolute under the data dir: {abs}"
+        );
+
+        // The full-resolution master path gets the same absolute-join treatment (R3): the
+        // lightbox needs an absolute path for convertFileSrc.
+        let store_abs = Path::new(&dto.store_path);
+        assert!(
+            store_abs.is_absolute()
+                && store_abs.starts_with(dir.path())
+                && dto.store_path.ends_with(".avif"),
+            "dto store_path is an absolute master path under the data dir: {}",
+            dto.store_path
         );
     }
 

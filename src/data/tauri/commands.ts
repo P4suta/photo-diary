@@ -1,9 +1,10 @@
-import { invoke } from '@tauri-apps/api/core'
+import { Channel, invoke } from '@tauri-apps/api/core'
+import type { ImportProgress } from '@/domain/models'
 
 // Typed wrappers matching each #[tauri::command] in src-tauri (the bridge to the real backend).
 // The Rust-side DTOs use #[serde(rename_all = "camelCase")], so keys are camelCase.
 
-/** Rust's PhotoDto (thumbPath is converted to thumbUrl via convertFileSrc on the front end). */
+/** Rust's PhotoDto (thumbPath/storePath are converted to URLs via convertFileSrc on the front end). */
 export interface PhotoDto {
   id: string
   aspect: string
@@ -15,6 +16,8 @@ export interface PhotoDto {
   height: number
   megapixels: number
   thumbPath: string | null
+  /** Absolute path of the full-resolution AVIF master (→ fullUrl in the lightbox). */
+  storePath: string
   sizeBytes: number
   format: string
   quality: string
@@ -59,15 +62,28 @@ export interface StatsDto {
   location: string
   lastImport: string
 }
-export interface ImportResult {
+export interface ImportFailureDto {
+  path: string
+  reason: string
+}
+export interface ImportResultDto {
   imported: number
   skipped: number
+  skippedUnsupported: number
   bytesSaved: number
+  failed: ImportFailureDto[]
+  scanErrors: string[]
 }
 
 /** Typed invoke surface onto photo-diary-core. */
 export const backend = {
-  importFolder: (path: string) => invoke<ImportResult>('import_folder', { path }),
+  // The Rust command takes a per-call IPC Channel (`on_progress`), delivered as `onProgress`.
+  // One ImportProgress is emitted per processed file; the caller's callback receives each.
+  importFolder: (path: string, onProgress?: (p: ImportProgress) => void) => {
+    const channel = new Channel<ImportProgress>()
+    if (onProgress) channel.onmessage = onProgress
+    return invoke<ImportResultDto>('import_folder', { path, onProgress: channel })
+  },
   listPhotos: () => invoke<PhotoDto[]>('list_photos'),
   listStarred: () => invoke<PhotoDto[]>('list_starred'),
   listNotes: () => invoke<NoteDto[]>('list_notes'),
@@ -79,6 +95,4 @@ export const backend = {
   getStats: () => invoke<StatsDto>('get_stats'),
   saveNote: (date: string, note: string) => invoke<void>('save_note', { date, note }),
   toggleStar: (photoId: number) => invoke<boolean>('toggle_star', { photoId }),
-  setCaption: (photoId: number, caption: string) =>
-    invoke<void>('set_caption', { photoId, caption }),
 }

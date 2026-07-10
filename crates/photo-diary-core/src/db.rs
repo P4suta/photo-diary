@@ -147,8 +147,17 @@ impl Db {
         Ok(self.conn.last_insert_rowid())
     }
 
-    /// Upserts the note for a date ('YYYY-MM-DD').
+    /// Upserts the note for a date ('YYYY-MM-DD'). An empty or whitespace-only note deletes the
+    /// row instead of storing '': clearing a note removes the day rather than leaving a phantom
+    /// note-day (one that reports `has_note = true` with no visible text). The non-empty note is
+    /// stored verbatim (only the emptiness *check* trims — intentional leading/trailing whitespace
+    /// inside real notes is preserved).
     pub fn set_note(&self, date: &str, note: &str) -> Result<()> {
+        if note.trim().is_empty() {
+            self.conn
+                .execute("DELETE FROM day_notes WHERE date = ?1", [date])?;
+            return Ok(());
+        }
         self.conn.execute(
             "INSERT INTO day_notes (date, note, updated_at)
              VALUES (?1, ?2, datetime('now'))
@@ -470,6 +479,49 @@ mod tests {
         assert_eq!(
             db.get_note("2026-07-04").unwrap(),
             Some("great day".to_string())
+        );
+    }
+
+    #[test]
+    fn empty_note_deletes_the_row() {
+        let db = Db::open_in_memory().unwrap();
+        db.set_note("2026-07-04", "temporary").unwrap();
+        assert_eq!(
+            db.get_note("2026-07-04").unwrap(),
+            Some("temporary".to_string())
+        );
+        // Clearing to empty removes the day entirely (no phantom note-day with has_note=true).
+        db.set_note("2026-07-04", "").unwrap();
+        assert_eq!(db.get_note("2026-07-04").unwrap(), None);
+        // The day no longer appears among note days.
+        assert!(db.distinct_dates().unwrap().is_empty());
+    }
+
+    #[test]
+    fn whitespace_only_note_deletes_the_row() {
+        let db = Db::open_in_memory().unwrap();
+        db.set_note("2026-07-04", "kept").unwrap();
+        db.set_note("2026-07-04", "   \n\t ").unwrap();
+        assert_eq!(db.get_note("2026-07-04").unwrap(), None);
+    }
+
+    #[test]
+    fn deleting_a_missing_note_is_a_noop() {
+        let db = Db::open_in_memory().unwrap();
+        // No row exists; clearing it must not error.
+        db.set_note("2026-07-04", "").unwrap();
+        assert_eq!(db.get_note("2026-07-04").unwrap(), None);
+    }
+
+    #[test]
+    fn non_empty_note_is_stored_verbatim() {
+        let db = Db::open_in_memory().unwrap();
+        // Interior/edge whitespace around real content is preserved; only the emptiness check trims.
+        db.set_note("2026-07-04", "  line one\n  line two  ")
+            .unwrap();
+        assert_eq!(
+            db.get_note("2026-07-04").unwrap(),
+            Some("  line one\n  line two  ".to_string())
         );
     }
 

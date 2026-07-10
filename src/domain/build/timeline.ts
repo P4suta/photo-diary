@@ -12,6 +12,12 @@ import type { DayEntry, Photo, TimeCluster } from '@/domain/models'
 /** A day with more photos than this switches to the digest (chapter) card. */
 export const DIGEST_THRESHOLD = 30
 
+/**
+ * Largest no-record gap (in days) that is filled with faint 'empty' rows. Longer
+ * runs are skipped so a diary with a multi-year hole doesn't emit thousands of rows.
+ */
+export const EMPTY_GAP_LIMIT = 14
+
 /** Cluster-splitting gap threshold (ms): a gap over one hour starts a new chapter. */
 const CLUSTER_GAP_MS = 60 * 60 * 1000
 
@@ -125,4 +131,72 @@ export function groupTimeline(
   }
 
   return entries
+}
+
+const MS_PER_DAY = 86_400_000
+
+/** 'YYYY-MM-DD' → UTC epoch ms of local-agnostic midnight (deterministic day math). */
+function dayMs(date: string): number {
+  return Date.parse(`${date}T00:00:00Z`)
+}
+
+/** UTC epoch ms → 'YYYY-MM-DD'. */
+function isoOf(ms: number): string {
+  return new Date(ms).toISOString().slice(0, 10)
+}
+
+/** Descending ISO-date comparator (lexicographic works for 'YYYY-MM-DD'). */
+function descByDate(a: { date: string }, b: { date: string }): number {
+  return a.date < b.date ? 1 : a.date > b.date ? -1 : 0
+}
+
+/**
+ * Assemble the timeline the UI consumes: `groupTimeline` plus two guarantees the
+ * app's core experience needs (and that raw grouping can't provide):
+ *
+ * 1. **Today is always present.** Even with no photos and no note, today appears as
+ *    an (empty) note_only card so you can always write today's note.
+ * 2. **Small no-record gaps are filled** with 'empty' rows (the timeline's faint
+ *    "nothing here" dividers). The UI hides them when `showEmptyDays` is off. Gaps
+ *    longer than {@link EMPTY_GAP_LIMIT} days are left unfilled.
+ *
+ * Pure: "today" is the passed `todayIso`; never reads the clock.
+ */
+export function buildTimeline(
+  photos: Photo[],
+  notes: { date: string; note: string }[],
+  todayIso: string,
+): DayEntry[] {
+  const byDate = new Map<string, DayEntry>()
+  for (const entry of groupTimeline(photos, notes, todayIso)) byDate.set(entry.date, entry)
+
+  // 1. Today guarantee — an empty, editable note_only card when nothing was recorded.
+  if (!byDate.has(todayIso)) {
+    byDate.set(todayIso, {
+      date: todayIso,
+      place: null,
+      today: true,
+      kind: 'note_only',
+      note: '',
+    })
+  }
+
+  const recorded = [...byDate.values()].sort(descByDate)
+
+  // 2. Gap-fill between consecutive recorded days (descending).
+  const out: DayEntry[] = []
+  for (let i = 0; i < recorded.length; i++) {
+    const cur = recorded[i]
+    out.push(cur)
+    const next = recorded[i + 1]
+    if (!next) continue
+    const missing = Math.round((dayMs(cur.date) - dayMs(next.date)) / MS_PER_DAY) - 1
+    if (missing < 1 || missing > EMPTY_GAP_LIMIT) continue
+    for (let d = 1; d <= missing; d++) {
+      const date = isoOf(dayMs(cur.date) - d * MS_PER_DAY)
+      out.push({ date, place: null, today: date === todayIso, kind: 'empty' })
+    }
+  }
+
+  return out
 }

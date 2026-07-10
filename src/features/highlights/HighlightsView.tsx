@@ -2,13 +2,22 @@ import { useTranslation } from 'react-i18next'
 import { useHighlights } from '@/app/queries'
 import { useUi } from '@/app/ui-store'
 import { formatMonthLabel } from '@/lib/datetime'
+import { ErrorPanel } from '@/ui/ErrorPanel'
 import { PhotoTile } from '@/ui/PhotoTile'
 
 /** Starred highlights (3c): only self-picked photos, grouped by month. No recommendations. */
 export function HighlightsView() {
   const { t, i18n } = useTranslation()
-  const { data } = useHighlights()
+  const { data, isError, refetch } = useHighlights()
   const openLightbox = useUi((s) => s.openLightbox)
+
+  if (isError) {
+    return (
+      <div className="px-8 py-6">
+        <ErrorPanel onRetry={() => refetch()} />
+      </div>
+    )
+  }
   if (!data) return null
 
   return (

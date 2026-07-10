@@ -5,13 +5,17 @@
 use photo_diary_core::dto::{
     DayCountDto, FolderDto, MonthRecordDto, NoteDto, PhotoDto, PlaceFacetDto, StatsDto,
 };
-use photo_diary_core::Library;
+use photo_diary_core::{ImportProgress, ImportSummary, Library};
 use serde::Serialize;
-use std::sync::Mutex;
+use std::path::Path;
+use std::sync::Arc;
+use tauri::ipc::Channel;
 use tauri::{Manager, State};
 
-/// App state: rusqlite's Connection isn't Sync, so wrap it in a Mutex.
-type LibState = Mutex<Library>;
+/// App state: the `Library` synchronizes DB access with an internal Mutex (locking only around
+/// each brief DB touch, not the CPU-heavy import work), so it is `Send + Sync`. We share it as an
+/// `Arc` so a command can clone it into a blocking task without holding a guard across `.await`.
+type LibState = Arc<Library>;
 
 #[derive(Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -31,113 +35,117 @@ struct ImportFailureDto {
     reason: String,
 }
 
+impl From<ImportSummary> for ImportDto {
+    fn from(s: ImportSummary) -> Self {
+        ImportDto {
+            imported: s.imported,
+            skipped: s.skipped,
+            skipped_unsupported: s.skipped_unsupported,
+            bytes_saved: s.bytes_saved,
+            failed: s
+                .failed
+                .into_iter()
+                .map(|f| ImportFailureDto {
+                    path: f.path,
+                    reason: f.reason,
+                })
+                .collect(),
+            scan_errors: s.scan_errors,
+        }
+    }
+}
+
 /// Imports a folder (scan -> EXIF -> AVIF -> thumbnail -> SQLite; duplicates skipped).
+///
+/// The heavy work (hash/EXIF/decode/AVIF encode) runs on a blocking task via `spawn_blocking` so
+/// it never freezes the main thread, and the `Library` locks the DB only per file, so reads issued
+/// mid-import don't wait for the whole import. `on_progress` is a per-call IPC channel: one
+/// `ImportProgress { current, total, filename }` is emitted per processed file (camelCase).
 #[tauri::command]
-fn import_folder(path: String, state: State<'_, LibState>) -> Result<ImportDto, String> {
-    let lib = state.lock().map_err(|e| e.to_string())?;
-    let s = lib
-        .import_folder(std::path::Path::new(&path))
-        .map_err(|e| e.to_string())?;
-    Ok(ImportDto {
-        imported: s.imported,
-        skipped: s.skipped,
-        skipped_unsupported: s.skipped_unsupported,
-        bytes_saved: s.bytes_saved,
-        failed: s
-            .failed
-            .into_iter()
-            .map(|f| ImportFailureDto {
-                path: f.path,
-                reason: f.reason,
-            })
-            .collect(),
-        scan_errors: s.scan_errors,
+async fn import_folder(
+    path: String,
+    on_progress: Channel<ImportProgress>,
+    state: State<'_, LibState>,
+) -> Result<ImportDto, String> {
+    // Clone the Arc so the blocking task owns a handle (State can't cross into spawn_blocking).
+    let lib = state.inner().clone();
+    let summary = tauri::async_runtime::spawn_blocking(move || {
+        lib.import_folder_with_progress(Path::new(&path), &|p| {
+            // A dropped receiver (e.g. window closed) shouldn't abort the import.
+            let _ = on_progress.send(p);
+        })
     })
+    .await
+    .map_err(|e| e.to_string())? // JoinError (task panicked/cancelled)
+    .map_err(|e| e.to_string())?; // import error
+    Ok(summary.into())
 }
 
 /// All photos (taken_at descending). The frontend uses this for day grouping/highlights.
 #[tauri::command]
-fn list_photos(state: State<'_, LibState>) -> Result<Vec<PhotoDto>, String> {
-    let lib = state.lock().map_err(|e| e.to_string())?;
-    lib.list_photos().map_err(|e| e.to_string())
+async fn list_photos(state: State<'_, LibState>) -> Result<Vec<PhotoDto>, String> {
+    state.list_photos().map_err(|e| e.to_string())
 }
 
 /// Starred photos.
 #[tauri::command]
-fn list_starred(state: State<'_, LibState>) -> Result<Vec<PhotoDto>, String> {
-    let lib = state.lock().map_err(|e| e.to_string())?;
-    lib.list_starred().map_err(|e| e.to_string())
+async fn list_starred(state: State<'_, LibState>) -> Result<Vec<PhotoDto>, String> {
+    state.list_starred().map_err(|e| e.to_string())
 }
 
 /// All day notes.
 #[tauri::command]
-fn list_notes(state: State<'_, LibState>) -> Result<Vec<NoteDto>, String> {
-    let lib = state.lock().map_err(|e| e.to_string())?;
-    lib.db().all_notes().map_err(|e| e.to_string())
+async fn list_notes(state: State<'_, LibState>) -> Result<Vec<NoteDto>, String> {
+    state.db().all_notes().map_err(|e| e.to_string())
 }
 
 /// Per-date photo counts for a year (for the heatmap).
 #[tauri::command]
-fn year_counts(year: i32, state: State<'_, LibState>) -> Result<Vec<DayCountDto>, String> {
-    let lib = state.lock().map_err(|e| e.to_string())?;
-    lib.db().year_counts(year).map_err(|e| e.to_string())
+async fn year_counts(year: i32, state: State<'_, LibState>) -> Result<Vec<DayCountDto>, String> {
+    state.db().year_counts(year).map_err(|e| e.to_string())
 }
 
 /// Per-day records for a year-month (for the calendar).
 #[tauri::command]
-fn month_records(
+async fn month_records(
     year: i32,
     month: u32,
     state: State<'_, LibState>,
 ) -> Result<Vec<MonthRecordDto>, String> {
-    let lib = state.lock().map_err(|e| e.to_string())?;
-    lib.db()
+    state
+        .db()
         .month_records(year, month)
         .map_err(|e| e.to_string())
 }
 
 /// List of watched folders (real photo counts, last_scan, and fs-derived status).
 #[tauri::command]
-fn list_folders(state: State<'_, LibState>) -> Result<Vec<FolderDto>, String> {
-    let lib = state.lock().map_err(|e| e.to_string())?;
-    lib.list_folders().map_err(|e| e.to_string())
+async fn list_folders(state: State<'_, LibState>) -> Result<Vec<FolderDto>, String> {
+    state.list_folders().map_err(|e| e.to_string())
 }
 
 /// Place facets (for search).
 #[tauri::command]
-fn place_facets(state: State<'_, LibState>) -> Result<Vec<PlaceFacetDto>, String> {
-    let lib = state.lock().map_err(|e| e.to_string())?;
-    lib.db().place_facets().map_err(|e| e.to_string())
+async fn place_facets(state: State<'_, LibState>) -> Result<Vec<PlaceFacetDto>, String> {
+    state.db().place_facets().map_err(|e| e.to_string())
 }
 
 /// Library statistics.
 #[tauri::command]
-fn get_stats(state: State<'_, LibState>) -> Result<StatsDto, String> {
-    let lib = state.lock().map_err(|e| e.to_string())?;
-    lib.stats_full().map_err(|e| e.to_string())
+async fn get_stats(state: State<'_, LibState>) -> Result<StatsDto, String> {
+    state.stats_full().map_err(|e| e.to_string())
 }
 
-/// Saves a day's note.
+/// Saves a day's note (an empty note deletes the day's note row).
 #[tauri::command]
-fn save_note(date: String, note: String, state: State<'_, LibState>) -> Result<(), String> {
-    let lib = state.lock().map_err(|e| e.to_string())?;
-    lib.save_note(&date, &note).map_err(|e| e.to_string())
+async fn save_note(date: String, note: String, state: State<'_, LibState>) -> Result<(), String> {
+    state.save_note(&date, &note).map_err(|e| e.to_string())
 }
 
 /// Toggles a photo's star and returns the new state.
 #[tauri::command]
-fn toggle_star(photo_id: i64, state: State<'_, LibState>) -> Result<bool, String> {
-    let lib = state.lock().map_err(|e| e.to_string())?;
-    lib.toggle_star(photo_id).map_err(|e| e.to_string())
-}
-
-/// Saves a photo's caption.
-#[tauri::command]
-fn set_caption(photo_id: i64, caption: String, state: State<'_, LibState>) -> Result<(), String> {
-    let lib = state.lock().map_err(|e| e.to_string())?;
-    lib.db()
-        .set_caption(photo_id, &caption)
-        .map_err(|e| e.to_string())
+async fn toggle_star(photo_id: i64, state: State<'_, LibState>) -> Result<bool, String> {
+    state.toggle_star(photo_id).map_err(|e| e.to_string())
 }
 
 pub fn run() {
@@ -147,7 +155,7 @@ pub fn run() {
             // Set up the DB and library storage under the app data directory.
             let dir = app.path().app_data_dir()?;
             let lib = Library::open(&dir)?;
-            app.manage(Mutex::new(lib));
+            app.manage(Arc::new(lib));
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![
@@ -161,8 +169,7 @@ pub fn run() {
             place_facets,
             get_stats,
             save_note,
-            toggle_star,
-            set_caption
+            toggle_star
         ])
         .run(tauri::generate_context!())
         .expect("error while running photo-diary");

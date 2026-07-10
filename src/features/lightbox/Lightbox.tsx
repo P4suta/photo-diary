@@ -114,27 +114,7 @@ export function Lightbox() {
           <ChevronRightIcon className="w-5 h-5" />
         </button>
 
-        {photo.thumbUrl ? (
-          <img
-            src={photo.thumbUrl}
-            alt=""
-            className="rounded-sm object-contain"
-            style={{ maxHeight: '84%', maxWidth: '82%' }}
-          />
-        ) : (
-          <div
-            className="ph rounded-sm flex items-center justify-center"
-            style={{
-              height: '70%',
-              maxWidth: '80%',
-              aspectRatio: photo.aspect.replace('/', ' / '),
-            }}
-          >
-            <span className="font-mono text-[11px] text-muted-foreground">
-              photo · {photo.width} × {photo.height}
-            </span>
-          </div>
-        )}
+        <ViewerImage photo={photo} />
 
         <div className="absolute bottom-4 inset-x-0 flex justify-center">
           <span className="font-mono text-[11px] text-muted-foreground bg-black/30 rounded px-2 py-1">
@@ -147,6 +127,63 @@ export function Lightbox() {
       {/* Info panel */}
       {infoOpen && <InfoPanel photo={photo} />}
     </div>
+  )
+}
+
+/**
+ * Full-resolution viewer image (requirement: the stored visually-lossless AVIF must
+ * actually be shown). Displays the thumbnail (blurred) as an instant placeholder,
+ * then swaps to the decoded full-res master. Falls back to a dimensions placeholder
+ * when neither URL exists (e.g. the phase-1 mock).
+ */
+function ViewerImage({ photo }: { photo: Photo }) {
+  const [fullReady, setFullReady] = useState(false)
+
+  useEffect(() => {
+    setFullReady(false)
+    if (!photo.fullUrl) return
+    const img = new Image()
+    img.src = photo.fullUrl
+    if (img.complete) {
+      setFullReady(true)
+      return
+    }
+    img.onload = () => setFullReady(true)
+    return () => {
+      img.onload = null
+    }
+  }, [photo.fullUrl])
+
+  const src = fullReady ? photo.fullUrl : (photo.thumbUrl ?? photo.fullUrl)
+
+  if (!src) {
+    return (
+      <div
+        className="ph rounded-sm flex items-center justify-center"
+        style={{
+          height: '70%',
+          maxWidth: '80%',
+          aspectRatio: photo.aspect.replace('/', ' / '),
+        }}
+      >
+        <span className="font-mono text-[11px] text-muted-foreground">
+          photo · {photo.width} × {photo.height}
+        </span>
+      </div>
+    )
+  }
+
+  const showingPlaceholder = !fullReady && Boolean(photo.fullUrl) && Boolean(photo.thumbUrl)
+  return (
+    <img
+      src={src}
+      alt=""
+      className={cn(
+        'rounded-sm object-contain transition-[filter] duration-300',
+        showingPlaceholder && 'blur-sm',
+      )}
+      style={{ maxHeight: '84%', maxWidth: '82%' }}
+    />
   )
 }
 

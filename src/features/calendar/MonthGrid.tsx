@@ -2,15 +2,23 @@ import { useTranslation } from 'react-i18next'
 import { useCalendarMonth } from '@/app/queries'
 import type { MonthCell } from '@/domain/calendar'
 import { cn } from '@/lib/cn'
+import { ErrorPanel } from '@/ui/ErrorPanel'
 import { heatClass } from './heat'
 
-export function MonthGrid() {
+export function MonthGrid({ year, month }: { year: number; month: number }) {
   const { i18n } = useTranslation()
-  const { data: cells } = useCalendarMonth()
+  const { data: cells, isError, refetch } = useCalendarMonth(year, month)
   // Weekday headers starting Sunday (2023-01-01 is a Sunday).
   const weekdays = Array.from({ length: 7 }, (_, i) =>
     new Intl.DateTimeFormat(i18n.language, { weekday: 'short' }).format(new Date(2023, 0, 1 + i)),
   )
+  if (isError) {
+    return (
+      <div className="mt-5">
+        <ErrorPanel onRetry={() => refetch()} />
+      </div>
+    )
+  }
   return (
     <div>
       <div className="grid grid-cols-7 gap-1.5 mt-5 text-center font-mono text-[10px] text-muted-foreground">

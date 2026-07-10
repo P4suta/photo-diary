@@ -22,6 +22,10 @@ pub struct PhotoDto {
     /// Absolute file path of the display thumbnail (frontend: convertFileSrc -> thumbUrl).
     /// Stored relative in the DB; joined with the current data dir here.
     pub thumb_path: Option<String>,
+    /// Absolute file path of the full-resolution AVIF master (frontend: convertFileSrc -> fullUrl,
+    /// shown in the lightbox). Stored relative in the DB; joined with the current data dir here
+    /// (same treatment as `thumb_path`). Never null — every photo has a stored master.
+    pub store_path: String,
     pub size_bytes: i64,
     pub format: String,
     pub quality: String,
@@ -39,6 +43,7 @@ impl PhotoDto {
         let thumb_path = r
             .thumb_path
             .map(|rel| data_dir.join(rel).to_string_lossy().into_owned());
+        let store_path = data_dir.join(r.store_path).to_string_lossy().into_owned();
         PhotoDto {
             id: r.id.to_string(),
             aspect: aspect_of(r.width, r.height),
@@ -50,6 +55,7 @@ impl PhotoDto {
             height: r.height,
             megapixels,
             thumb_path,
+            store_path,
             size_bytes: r.store_bytes,
             format: "AVIF".to_string(),
             quality: "Visually lossless".to_string(),

@@ -1,11 +1,13 @@
 import { convertFileSrc } from '@tauri-apps/api/core'
-import { buildHeatWeeks, buildMonthCells, groupHighlights, groupTimeline } from '@/domain/build'
+import { buildHeatWeeks, buildMonthCells, buildTimeline, groupHighlights } from '@/domain/build'
 import type { MonthCell } from '@/domain/calendar'
 import type { HeatWeek } from '@/domain/heatmap'
 import type {
   AspectRatio,
   DayEntry,
   HighlightsData,
+  ImportProgress,
+  ImportResult,
   LibraryStats,
   Photo,
   PlaceFacet,
@@ -14,7 +16,7 @@ import type {
 import type { PhotoLibrary } from '@/domain/ports'
 import { backend, type PhotoDto } from './commands'
 
-/** Rust's PhotoDto → the port's Photo (thumbPath converted to an asset URL). */
+/** Rust's PhotoDto → the port's Photo (thumbPath/storePath converted to asset URLs). */
 function mapPhoto(d: PhotoDto): Photo {
   return {
     id: d.id,
@@ -27,6 +29,7 @@ function mapPhoto(d: PhotoDto): Photo {
     height: d.height,
     megapixels: d.megapixels,
     thumbUrl: d.thumbPath ? convertFileSrc(d.thumbPath) : undefined,
+    fullUrl: convertFileSrc(d.storePath),
     sizeBytes: d.sizeBytes,
     format: d.format,
     quality: d.quality,
@@ -54,19 +57,22 @@ function todayParts() {
 export class TauriPhotoLibrary implements PhotoLibrary {
   async listTimeline(): Promise<DayEntry[]> {
     const [photos, notes] = await Promise.all([backend.listPhotos(), backend.listNotes()])
-    return groupTimeline(photos.map(mapPhoto), notes, todayParts().iso)
+    return buildTimeline(photos.map(mapPhoto), notes, todayParts().iso)
   }
 
-  async getMonth(): Promise<MonthCell[]> {
+  async getMonth(year: number, month: number): Promise<MonthCell[]> {
     const t = todayParts()
-    const records = await backend.monthRecords(t.year, t.month)
-    return buildMonthCells(t.year, t.month, records, { year: t.year, month: t.month, day: t.day })
+    const records = await backend.monthRecords(year, month)
+    return buildMonthCells(year, month, records, { year: t.year, month: t.month, day: t.day })
   }
 
-  async getHeatmap(): Promise<HeatWeek[]> {
-    const t = todayParts()
-    const counts = await backend.yearCounts(t.year)
-    return buildHeatWeeks(t.year, counts, t.iso)
+  async getHeatmap(year: number): Promise<HeatWeek[]> {
+    const counts = await backend.yearCounts(year)
+    return buildHeatWeeks(year, counts, todayParts().iso)
+  }
+
+  importFolder(path: string, onProgress?: (p: ImportProgress) => void): Promise<ImportResult> {
+    return backend.importFolder(path, onProgress)
   }
 
   async getHighlights(): Promise<HighlightsData> {

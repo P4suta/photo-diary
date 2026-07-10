@@ -31,7 +31,7 @@ export function runPortContract(name: string, factory: () => PhotoLibrary): void
     })
 
     it('getMonth: non-empty cells, level in -1..4', async () => {
-      const cells = await factory().getMonth()
+      const cells = await factory().getMonth(2026, 7)
       expect(cells.length).toBeGreaterThan(0)
       for (const c of cells) {
         expect(c.level).toBeGreaterThanOrEqual(-1)
@@ -40,7 +40,7 @@ export function runPortContract(name: string, factory: () => PhotoLibrary): void
     })
 
     it('getHeatmap: 7 days per week, level in -1..4', async () => {
-      const weeks = await factory().getHeatmap()
+      const weeks = await factory().getHeatmap(2026)
       expect(weeks.length).toBeGreaterThan(0)
       for (const w of weeks) {
         expect(w.days).toHaveLength(7)

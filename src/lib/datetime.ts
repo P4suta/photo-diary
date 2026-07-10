@@ -9,6 +9,19 @@ function localDate(date: string): Date {
   return new Date(`${date.slice(0, 10)}T00:00:00`)
 }
 
+/** Today's local parts (1-based month), for seeding date-dependent UI state. */
+export function todayParts(): { year: number; month: number; day: number } {
+  const now = new Date()
+  return { year: now.getFullYear(), month: now.getMonth() + 1, day: now.getDate() }
+}
+
+/** localized 'year month' label, e.g. 'July 2026' / '2026年7月'. */
+export function formatYearMonth(year: number, month: number, locale: string): string {
+  return new Intl.DateTimeFormat(locale, { year: 'numeric', month: 'long' }).format(
+    new Date(year, month - 1, 1),
+  )
+}
+
 /** 'YYYY-MM-DD' → e.g. 'July 5' (en) / '7月5日' (ja) */
 export function formatMonthDay(date: string, locale: string): string {
   return new Intl.DateTimeFormat(locale, { month: 'long', day: 'numeric' }).format(localDate(date))

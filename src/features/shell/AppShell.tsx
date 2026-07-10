@@ -2,6 +2,7 @@ import { Outlet } from 'react-router-dom'
 import { ImportOverlay } from '@/features/import/ImportOverlay'
 import { Lightbox } from '@/features/lightbox/Lightbox'
 import { Sidebar } from './Sidebar'
+import { Toast } from './Toast'
 import { TopBar } from './TopBar'
 
 export function AppShell() {
@@ -16,6 +17,7 @@ export function AppShell() {
       </div>
       <Lightbox />
       <ImportOverlay />
+      <Toast />
     </div>
   )
 }

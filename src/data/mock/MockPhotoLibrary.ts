@@ -3,6 +3,8 @@ import { buildHeatWeeks, type HeatWeek } from '@/domain/heatmap'
 import type {
   DayEntry,
   HighlightsData,
+  ImportProgress,
+  ImportResult,
   LibraryStats,
   Photo,
   PlaceFacet,
@@ -22,13 +24,14 @@ export class MockPhotoLibrary implements PhotoLibrary {
     return Promise.resolve(this.days)
   }
 
-  getMonth(): Promise<MonthCell[]> {
+  // Phase 1: the mock is fixed to July 2026, so year/month are accepted but ignored.
+  getMonth(_year: number, _month: number): Promise<MonthCell[]> {
     return Promise.resolve(
       buildMonthCells({ leadingBlanks: 3, daysInMonth: 31, today: 5, records: julyRecords }),
     )
   }
 
-  getHeatmap(): Promise<HeatWeek[]> {
+  getHeatmap(_year: number): Promise<HeatWeek[]> {
     return Promise.resolve(buildHeatWeeks())
   }
 
@@ -46,6 +49,26 @@ export class MockPhotoLibrary implements PhotoLibrary {
 
   listPlaceFacets(): Promise<PlaceFacet[]> {
     return Promise.resolve(placeFacets)
+  }
+
+  // Simulate an import so the browser-dev overlay shows real progress (no real files).
+  async importFolder(
+    _path: string,
+    onProgress?: (p: ImportProgress) => void,
+  ): Promise<ImportResult> {
+    const total = 24
+    for (let current = 1; current <= total; current++) {
+      onProgress?.({ current, total, filename: `IMG_${1000 + current}.jpg` })
+      await new Promise((resolve) => setTimeout(resolve, 60))
+    }
+    return {
+      imported: total,
+      skipped: 0,
+      skippedUnsupported: 0,
+      bytesSaved: 0,
+      failed: [],
+      scanErrors: [],
+    }
   }
 
   saveNote(date: string, note: string): Promise<void> {
