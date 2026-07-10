@@ -25,7 +25,9 @@ interface UiStore {
 
   /** i18n key of a transient error toast (null = hidden). */
   toastKey: string | null
-  showToast: (key: string) => void
+  /** Interpolation params for the toast's i18n key (e.g. import failure counts). */
+  toastParams?: Record<string, unknown>
+  showToast: (key: string, params?: Record<string, unknown>) => void
   dismissToast: () => void
 }
 
@@ -55,6 +57,8 @@ export const useUi = create<UiStore>((set) => ({
   setImportProgress: (importProgress) => set({ importProgress }),
 
   toastKey: null,
-  showToast: (toastKey) => set({ toastKey }),
-  dismissToast: () => set({ toastKey: null }),
+  toastParams: undefined,
+  // Always replace params (never merge) so a later toast can't inherit stale counts.
+  showToast: (toastKey, toastParams) => set({ toastKey, toastParams }),
+  dismissToast: () => set({ toastKey: null, toastParams: undefined }),
 }))

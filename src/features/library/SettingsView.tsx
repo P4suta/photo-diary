@@ -7,89 +7,105 @@ import { type Accent, type ThemeMode, useTheme } from '@/app/theme'
 import type { WatchedFolder } from '@/domain/models'
 import { formatBytes, formatCount, splitBytes } from '@/lib/format'
 import { Button } from '@/ui/Button'
+import { ErrorPanel } from '@/ui/ErrorPanel'
 import { FolderIcon } from '@/ui/icons'
 import { Segmented } from '@/ui/Segmented'
 
 export function SettingsView() {
   const { t, i18n } = useTranslation()
-  const { data: folders } = useFolders()
-  const { data: stats } = useStats()
+  const { data: folders, isError: foldersError, refetch: refetchFolders } = useFolders()
+  const { data: stats, isError: statsError, refetch: refetchStats } = useStats()
   const { mode, accent, showEmptyDays, setMode, setAccent, setShowEmptyDays } = useTheme()
+  // Folders + internal-library are backend-driven; the Appearance section is pure client
+  // state, so a load failure only replaces the data region — theme controls stay usable.
+  const dataError = foldersError || statsError
+  const retryData = () => {
+    refetchFolders()
+    refetchStats()
+  }
 
   return (
     <div className="p-8">
       <div className="max-w-[880px]">
         <h2 className="text-[20px] font-semibold">{t('settings.title')}</h2>
 
-        {/* Watched folders */}
-        <section className="mt-6">
-          <h3 className="text-[13px] font-semibold">{t('settings.watchedFolders')}</h3>
-          <p className="mt-1 text-[12px] leading-5 text-muted-foreground">
-            {t('settings.watchedFoldersDesc')}
-          </p>
-          <div className="mt-3 rounded-lg border border-border divide-y divide-border overflow-hidden">
-            {folders?.map((f) => (
-              <FolderRow key={f.id} folder={f} />
-            ))}
+        {dataError ? (
+          <div className="mt-6">
+            <ErrorPanel onRetry={retryData} />
           </div>
-          <Button variant="outline" className="mt-3">
-            {t('settings.addFolder')}
-          </Button>
-        </section>
-
-        {/* Internal library */}
-        {stats && (
-          <section className="mt-8 pt-6 border-t border-border">
-            <h3 className="text-[13px] font-semibold">{t('settings.internalLibrary')}</h3>
-            <p className="mt-1 text-[12px] leading-5 text-muted-foreground">
-              {t('settings.internalLibraryDesc')}
-            </p>
-            <div className="mt-3 grid grid-cols-3 gap-3">
-              <StatCard label={t('settings.statTotalUsed')} {...splitBytes(stats.usedBytes)} />
-              <StatCard
-                label={t('settings.statPhotos')}
-                value={formatCount(stats.photoCount)}
-                unit={t('settings.photoUnit')}
-              />
-              <StatCard
-                label={t('settings.statRecordedDays')}
-                value={formatCount(stats.dayCount)}
-                unit={t('settings.dayUnit')}
-              />
-            </div>
-            <div className="mt-3 rounded-lg border border-border bg-card px-4 py-3 flex items-center gap-3">
-              <div className="min-w-0">
-                <div className="font-mono text-[10px] text-muted-foreground">
-                  {t('settings.storageLocation')}
-                </div>
-                <div className="font-mono text-[12px] truncate mt-0.5">{stats.location}</div>
+        ) : (
+          <>
+            {/* Watched folders */}
+            <section className="mt-6">
+              <h3 className="text-[13px] font-semibold">{t('settings.watchedFolders')}</h3>
+              <p className="mt-1 text-[12px] leading-5 text-muted-foreground">
+                {t('settings.watchedFoldersDesc')}
+              </p>
+              <div className="mt-3 rounded-lg border border-border divide-y divide-border overflow-hidden">
+                {folders?.map((f) => (
+                  <FolderRow key={f.id} folder={f} />
+                ))}
               </div>
-              <Button variant="outline" size="sm" className="ml-auto shrink-0">
-                {t('settings.openFolder')}
+              <Button variant="outline" className="mt-3">
+                {t('settings.addFolder')}
               </Button>
-            </div>
-            <div className="mt-3 rounded-lg border border-border bg-card px-4 py-3 flex items-center gap-3">
-              <div>
-                <div className="font-mono text-[10px] text-muted-foreground">
-                  {t('settings.thumbnailCache')}
+            </section>
+
+            {/* Internal library */}
+            {stats && (
+              <section className="mt-8 pt-6 border-t border-border">
+                <h3 className="text-[13px] font-semibold">{t('settings.internalLibrary')}</h3>
+                <p className="mt-1 text-[12px] leading-5 text-muted-foreground">
+                  {t('settings.internalLibraryDesc')}
+                </p>
+                <div className="mt-3 grid grid-cols-3 gap-3">
+                  <StatCard label={t('settings.statTotalUsed')} {...splitBytes(stats.usedBytes)} />
+                  <StatCard
+                    label={t('settings.statPhotos')}
+                    value={formatCount(stats.photoCount)}
+                    unit={t('settings.photoUnit')}
+                  />
+                  <StatCard
+                    label={t('settings.statRecordedDays')}
+                    value={formatCount(stats.dayCount)}
+                    unit={t('settings.dayUnit')}
+                  />
                 </div>
-                <div className="text-[13px] mt-0.5">
-                  {formatBytes(stats.thumbnailCacheBytes)}{' '}
-                  <span className="text-[11px] text-muted-foreground">
-                    {t('settings.thumbnailCacheNote')}
-                  </span>
+                <div className="mt-3 rounded-lg border border-border bg-card px-4 py-3 flex items-center gap-3">
+                  <div className="min-w-0">
+                    <div className="font-mono text-[10px] text-muted-foreground">
+                      {t('settings.storageLocation')}
+                    </div>
+                    <div className="font-mono text-[12px] truncate mt-0.5">{stats.location}</div>
+                  </div>
+                  <Button variant="outline" size="sm" className="ml-auto shrink-0">
+                    {t('settings.openFolder')}
+                  </Button>
                 </div>
-              </div>
-              <div className="ml-auto flex items-center gap-1.5 shrink-0">
-                <Button variant="outline" size="sm">
-                  {t('settings.regenerate')}
-                </Button>
-                <Button variant="ghost" size="sm">
-                  {t('settings.clear')}
-                </Button>
-              </div>
-            </div>
-          </section>
+                <div className="mt-3 rounded-lg border border-border bg-card px-4 py-3 flex items-center gap-3">
+                  <div>
+                    <div className="font-mono text-[10px] text-muted-foreground">
+                      {t('settings.thumbnailCache')}
+                    </div>
+                    <div className="text-[13px] mt-0.5">
+                      {formatBytes(stats.thumbnailCacheBytes)}{' '}
+                      <span className="text-[11px] text-muted-foreground">
+                        {t('settings.thumbnailCacheNote')}
+                      </span>
+                    </div>
+                  </div>
+                  <div className="ml-auto flex items-center gap-1.5 shrink-0">
+                    <Button variant="outline" size="sm">
+                      {t('settings.regenerate')}
+                    </Button>
+                    <Button variant="ghost" size="sm">
+                      {t('settings.clear')}
+                    </Button>
+                  </div>
+                </div>
+              </section>
+            )}
+          </>
         )}
 
         {/* Appearance */}

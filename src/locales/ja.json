@@ -137,13 +137,15 @@
     "preparing": "準備中…",
     "importingCount": "{{count, number}}枚を取り込んでいます",
     "body": "フル解像度の AVIF に最適化しながら、日記のライブラリへコピーしています。原本は変更されません。",
-    "continueBackground": "バックグラウンドで続行"
+    "continueBackground": "バックグラウンドで続行",
+    "completedWithIssues": "取り込み完了 · {{failed, number}}件を取り込めず、{{skipped, number}}件は非対応でスキップしました。"
   },
   "errors": {
     "loadTitle": "読み込めませんでした",
     "loadBody": "ライブラリの読み込み中に問題が発生しました。",
     "retry": "再試行",
     "loadFailed": "ライブラリを読み込めませんでした。もう一度お試しください。",
+    "importFailed": "取り込みに失敗しました。もう一度お試しください。",
     "dismiss": "閉じる"
   }
 }

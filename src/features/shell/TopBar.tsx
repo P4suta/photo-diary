@@ -10,6 +10,7 @@ export function TopBar() {
   const { t } = useTranslation()
   const setImportState = useUi((s) => s.setImportState)
   const setImportProgress = useUi((s) => s.setImportProgress)
+  const showToast = useUi((s) => s.showToast)
   const importFolder = useImportFolder()
 
   // Pick a folder (Tauri) or use the mock (browser dev), then import through the port.
@@ -23,7 +24,16 @@ export function TopBar() {
     setImportProgress(null)
     setImportState('panel')
     try {
-      await importFolder.mutateAsync({ path, onProgress: setImportProgress })
+      const result = await importFolder.mutateAsync({ path, onProgress: setImportProgress })
+      // A successful import can still leave per-file failures / undecodable files behind —
+      // surface them instead of closing the overlay as if everything went in.
+      const failed = result.failed.length + result.scanErrors.length
+      if (failed > 0 || result.skippedUnsupported > 0) {
+        showToast('import.completedWithIssues', { failed, skipped: result.skippedUnsupported })
+      }
+    } catch {
+      // A rejected import must reach the user, not become an unhandled promise rejection.
+      showToast('errors.importFailed')
     } finally {
       setImportState('closed')
       setImportProgress(null)

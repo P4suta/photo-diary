@@ -22,16 +22,20 @@ export function useTimeline() {
 
 export function useCalendarMonth(year: number, month: number) {
   const library = useLibrary()
+  const today = useToday()
+  // `today` in the key rolls the "today" ring over at midnight, like the timeline.
   return useQuery({
-    queryKey: [...qk.month, year, month],
+    queryKey: [...qk.month, year, month, today],
     queryFn: () => library.getMonth(year, month),
   })
 }
 
 export function useHeatmap(year: number) {
   const library = useLibrary()
+  const today = useToday()
+  // `today` in the key rolls the "today" cell over at midnight, like the timeline.
   return useQuery({
-    queryKey: [...qk.heatmap, year],
+    queryKey: [...qk.heatmap, year, today],
     queryFn: () => library.getHeatmap(year),
   })
 }

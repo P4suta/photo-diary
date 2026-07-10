@@ -139,13 +139,15 @@
     "preparing": "Preparing…",
     "importingCount": "Importing {{count, number}} photos",
     "body": "Copying into the diary library while optimizing to full-resolution AVIF. Originals are not modified.",
-    "continueBackground": "Continue in background"
+    "continueBackground": "Continue in background",
+    "completedWithIssues": "Import finished · {{failed, number}} couldn't be imported, {{skipped, number}} unsupported skipped."
   },
   "errors": {
     "loadTitle": "Couldn't load",
     "loadBody": "Something went wrong reading your library.",
     "retry": "Try again",
     "loadFailed": "Couldn't load your library. Please try again.",
+    "importFailed": "Import failed. Please try again.",
     "dismiss": "Dismiss"
   }
 }

@@ -111,6 +111,11 @@ export class TauriPhotoLibrary implements PhotoLibrary {
 
   async toggleStar(photoId: string): Promise<void> {
     const n = Number(photoId)
-    if (Number.isFinite(n)) await backend.toggleStar(n)
+    // Reject a bad id loudly instead of silently no-opping. Note Number('') === 0 is
+    // finite, so an empty/whitespace id must be rejected explicitly, not just via NaN.
+    if (photoId.trim() === '' || !Number.isInteger(n)) {
+      throw new Error(`toggleStar: non-numeric photo id ${JSON.stringify(photoId)}`)
+    }
+    await backend.toggleStar(n)
   }
 }
