@@ -1,0 +1,9 @@
+{
+  // Suggested when opening the repo (Extensions: Show Recommended Extensions).
+  "recommendations": [
+    "biomejs.biome", // Biome — lint + format for TS/TSX/JSON (matches `just lint` / `just fmt`)
+    "bradlc.vscode-tailwindcss", // Tailwind IntelliSense for the tailwind.config.ts token bridge
+    "tamasfe.even-better-toml", // TOML editing for mise.toml (matches taplo)
+    "skellock.just" // justfile syntax highlighting (setup/dev/check/build recipes)
+  ]
+}

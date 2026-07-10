@@ -1,0 +1,53 @@
+# photo-diary — editor conventions (following the find-my-files house style).
+#
+# The source of truth for formatting is each tool: biome.json for TS/JS/JSON, taplo.toml
+# for TOML. This .editorconfig fixes a shared baseline consistent with those
+# (charset / line endings / final newline / trailing whitespace / indent width) so it
+# takes effect the moment the editor opens a file. To keep local==CI intact, the defaults
+# here must always match the biome.json / taplo.toml settings.
+root = true
+
+# ── Baseline for all files.
+# utf-8 / lf / final newline / trim trailing whitespace. Indent is 2 spaces
+# (matches biome formatter: indentStyle=space, indentWidth=2).
+[*]
+charset = utf-8
+end_of_line = lf
+insert_final_newline = true
+trim_trailing_whitespace = true
+indent_style = space
+indent_size = 2
+
+# ── TypeScript / JavaScript. The actual formatting is Biome's job
+#    (single quote / semicolons asNeeded / trailingCommas=all / lineWidth=100).
+#    Here we only pin the indent to match Biome, made explicit.
+[*.{ts,tsx,js,jsx,mjs,cjs}]
+indent_size = 2
+max_line_length = 100
+
+# ── JSON / JSONC. Includes biome.json, tsconfig, and .vscode/*.
+#    package.json is rewritten by pnpm (pnpm@10.34.4), so don't touch it.
+#    .vscode/* is JSONC with comments allowed (2-space formatting).
+[*.{json,jsonc}]
+indent_size = 2
+
+# ── TOML (mise.toml / taplo.toml, etc.). taplo is the only formatter.
+#    Match indent_string="  " (2 spaces) / column_width=100.
+[*.toml]
+indent_size = 2
+max_line_length = 100
+
+# ── CSS. src/index.css is the single source of truth for design tokens
+#    (:root/.dark/[data-accent]/heat). Biome leaves CSS out of scope (excluded via
+#    files.includes), so formatting is up to the editor. Only the baseline applies
+#    (2 spaces / trim trailing whitespace / final newline).
+[*.css]
+indent_size = 2
+
+# ── Markdown. A trailing 2 spaces means "hard line break", so keep trailing whitespace.
+[*.md]
+trim_trailing_whitespace = false
+
+# ── justfile. Recipe bodies are shell lines, so don't collapse the indentation.
+[justfile]
+indent_style = tab

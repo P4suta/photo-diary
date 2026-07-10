@@ -1,0 +1,5 @@
+# Rust workspace: the pure core (photo-diary-core) and the Tauri shell (src-tauri).
+# A cross-language layer split that mirrors the frontend's domain←data←features.
+[workspace]
+resolver = "2"
+members = ["crates/photo-diary-core", "src-tauri"]

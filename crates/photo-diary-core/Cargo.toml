@@ -1,0 +1,24 @@
+[package]
+name = "photo-diary-core"
+version = "0.1.0"
+edition = "2021"
+description = "Pure logic layer for photo-diary: EXIF reading, folder scanning, thumbnails, AVIF conversion, SQLite. Testable without Tauri."
+publish = false
+
+[dependencies]
+thiserror = "2"
+walkdir = "2"
+kamadak-exif = "0.6"
+image = "0.25"
+# Disable asm: drop rav1e's NASM build dependency and build in pure Rust (don't require
+# nasm on the system = reproducibility first). Keep threading to preserve parallel encoding.
+ravif = { version = "0.11", default-features = false, features = ["threading"] }
+rgb = "0.8"
+imgref = "1"
+rusqlite = { version = "0.32", features = ["bundled"] }
+serde = { version = "1", features = ["derive"] }
+sha2 = "0.10"
+time = "0.3"
+
+[dev-dependencies]
+tempfile = "3"

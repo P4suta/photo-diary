@@ -1,0 +1,24 @@
+# Conventional Commits enforcement for the lefthook commit-msg hook.
+# Keeps history well-formed for future release automation (release-please etc.).
+style = "conventional"
+# Lowercase subjects (`feat(timeline): add digest card`), matching common
+# PR-title gates and keeping the log consistent.
+subject_capitalized = false
+# Enforce the conventional *format*, not arbitrary length (PR titles run long).
+subject_length = 0
+line_length = 0
+# The types this project uses. committed's default set omits ci/build/deps/revert.
+allowed_types = [
+  "feat",
+  "fix",
+  "perf",
+  "docs",
+  "refactor",
+  "test",
+  "chore",
+  "ci",
+  "build",
+  "deps",
+  "style",
+  "revert",
+]

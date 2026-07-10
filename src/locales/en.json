@@ -1,0 +1,148 @@
+{
+  "nav": {
+    "timeline": "Timeline",
+    "calendar": "Calendar",
+    "highlights": "Highlights",
+    "settings": "Settings"
+  },
+  "brand": {
+    "subtitle": "Photo diary"
+  },
+  "unit": {
+    "photo_one": "{{count, number}} photo",
+    "photo_other": "{{count, number}} photos",
+    "day_one": "{{count, number}} day",
+    "day_other": "{{count, number}} days"
+  },
+  "sidebar": {
+    "lastImport": "Last import {{time}}"
+  },
+  "topbar": {
+    "addPhotos": "Add photos"
+  },
+  "search": {
+    "placeholder": "Search…",
+    "close": "Close search",
+    "periodHeading": "Period",
+    "placeHeading": "Place",
+    "clear": "Clear",
+    "apply": "Apply",
+    "period": {
+      "today": "Today",
+      "thisWeek": "This week",
+      "thisMonth": "This month",
+      "thisYear": "This year",
+      "todayLastYear": "A year ago today"
+    }
+  },
+  "day": {
+    "today": "Today",
+    "noPhotos": "No photos",
+    "noRecord": "No record",
+    "writeNote": "Write a note…",
+    "clickToEdit": "Click to edit",
+    "notePlaceholder": "A few lines about today."
+  },
+  "photo": {
+    "open": "Open photo",
+    "note": "Note"
+  },
+  "digest": {
+    "showAll": "Show all"
+  },
+  "event": {
+    "label": "Event",
+    "noteSuffix": " · note"
+  },
+  "lightbox": {
+    "close": "Close (Esc)",
+    "prev": "Previous (←)",
+    "next": "Next (→)",
+    "starred": "★ Picked",
+    "star": "★ Pick",
+    "footerHint": "i info / S ★",
+    "photoInfo": "Photo info",
+    "storedInLibrary": "Stored in library",
+    "fieldTakenAt": "Taken at",
+    "fieldPlace": "Place",
+    "fieldDimensions": "Dimensions (full resolution)",
+    "fieldStoredSize": "Stored size",
+    "fieldFilename": "Original filename",
+    "noPlace": "No location data",
+    "importedAt": "Imported: {{time}}",
+    "exportCopy": "Export this copy",
+    "exportHint": "Save the full-resolution AVIF file to any location."
+  },
+  "calendar": {
+    "prevMonth": "Previous month",
+    "nextMonth": "Next month",
+    "today": "Today",
+    "month": "Month",
+    "year": "Year",
+    "note": "note",
+    "less": "Less",
+    "more": "More",
+    "yearSummary": "{{days, number}} days recorded · {{count, number}} photos"
+  },
+  "highlights": {
+    "title": "Highlights",
+    "subtitle": "{{count, number}} photos — all chosen by you"
+  },
+  "settings": {
+    "title": "Settings",
+    "watchedFolders": "Watched folders",
+    "watchedFoldersDesc": "Watched folders are scanned and new photos imported automatically. Imported photos are kept inside the diary, so you can move or delete the originals later.",
+    "addFolder": "Add folder…",
+    "internalLibrary": "Internal library",
+    "internalLibraryDesc": "Every photo is kept here permanently as a full-resolution, visually lossless AVIF.",
+    "statTotalUsed": "Total used",
+    "statPhotos": "Photos",
+    "statRecordedDays": "Recorded days",
+    "photoUnit": "",
+    "dayUnit": "",
+    "storageLocation": "Storage location",
+    "openFolder": "Open folder",
+    "thumbnailCache": "Thumbnail cache",
+    "thumbnailCacheNote": " · deleting it does not affect your photos",
+    "regenerate": "Regenerate",
+    "clear": "Clear",
+    "appearance": "Appearance",
+    "language": "Language",
+    "theme": "Theme",
+    "accent": "Accent",
+    "emptyDays": "Days with no record",
+    "themeLight": "Light",
+    "themeDark": "Dark",
+    "themeSystem": "System",
+    "accentMoss": "Moss",
+    "accentDusk": "Dusk",
+    "accentClay": "Clay",
+    "show": "Dim",
+    "hide": "Hide",
+    "viewTokens": "View design tokens →",
+    "watching": "Watching",
+    "disconnected": "Disconnected",
+    "lastScan": "last scan {{time}}",
+    "rescan": "Rescan",
+    "remove": "Remove"
+  },
+  "onboarding": {
+    "title": "A diary that begins from photos",
+    "body": "Add a folder and your photos line up by capture date, copied into the diary library. They are optimized to lightweight full-resolution AVIF, so <strong>the originals are never modified, and even if you delete them after import your photos stay here.</strong>",
+    "chooseFolder": "Choose a folder…",
+    "orDrop": "or drop photos here",
+    "formats": "Supported: JPEG · HEIC · PNG · WebP · AVIF",
+    "viewDemo": "→ View the demo timeline"
+  },
+  "import": {
+    "importing": "Importing · {{done}} / {{total}}",
+    "optimizing": "Optimizing copies · about {{minutes}} min left",
+    "close": "Close",
+    "importingCount": "Importing {{count, number}} photos",
+    "body": "Copying into the diary library while optimizing to full-resolution AVIF. Originals are not modified.",
+    "remaining": "about {{minutes}} min left",
+    "saved": "Saved so far: {{from}} → {{to}}",
+    "pause": "Pause",
+    "continueBackground": "Continue in background"
+  }
+}

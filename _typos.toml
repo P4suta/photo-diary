@@ -1,0 +1,15 @@
+# typos-cli configuration (pre-commit hook + `just typos`).
+[files]
+# Generated / vendored / design-reference trees — never our source, never
+# spell-checked. typos scans the working tree, not just tracked files.
+extend-exclude = [
+  "dist/",
+  "node_modules/",
+  "target/",
+  "pnpm-lock.yaml",
+  "Cargo.lock",
+  "src-tauri/gen/",
+  "_handoff/",
+  # Japanese message catalog — intentionally non-English, never spell-checked.
+  "src/locales/ja.json",
+]

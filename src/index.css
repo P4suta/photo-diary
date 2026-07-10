@@ -1,0 +1,85 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* =========================================================================
+   Design tokens — the single source of truth (ported from the Claude Design handoff).
+   shadcn/ui-compatible HSL variables. --moss is the accent.
+   ========================================================================= */
+:root {
+  --background: 40 14% 97%;
+  --foreground: 30 8% 16%;
+  --card: 0 0% 100%;
+  --card-foreground: 30 8% 16%;
+  --muted: 40 10% 93%;
+  --muted-foreground: 30 5% 46%;
+  --border: 38 10% 88%;
+  --input: 38 10% 84%;
+  --ring: 30 8% 62%;
+  --primary: 30 8% 20%;
+  --primary-foreground: 40 14% 97%;
+  --secondary: 40 10% 94%;
+  --secondary-foreground: 30 8% 25%;
+  --accent: 40 10% 92%;
+  --accent-foreground: 30 8% 16%;
+  --destructive: 5 55% 46%;
+  --moss: hsl(155 22% 40%);
+  --heat-1: color-mix(in oklab, var(--moss) 28%, transparent);
+  --heat-2: color-mix(in oklab, var(--moss) 52%, transparent);
+  --heat-3: color-mix(in oklab, var(--moss) 76%, transparent);
+  --heat-4: var(--moss);
+}
+.dark {
+  --background: 30 5% 9%;
+  --foreground: 40 8% 88%;
+  --card: 30 5% 12%;
+  --card-foreground: 40 8% 88%;
+  --muted: 30 4% 16%;
+  --muted-foreground: 30 4% 56%;
+  --border: 30 4% 20%;
+  --input: 30 4% 24%;
+  --ring: 30 4% 42%;
+  --primary: 40 8% 88%;
+  --primary-foreground: 30 5% 12%;
+  --secondary: 30 4% 16%;
+  --secondary-foreground: 40 8% 80%;
+  --accent: 30 4% 18%;
+  --accent-foreground: 40 8% 88%;
+  --destructive: 5 50% 58%;
+  --moss: hsl(155 18% 55%);
+}
+[data-accent='dusk'] {
+  --moss: hsl(228 20% 50%);
+}
+.dark[data-accent='dusk'] {
+  --moss: hsl(228 22% 62%);
+}
+[data-accent='clay'] {
+  --moss: hsl(25 32% 46%);
+}
+.dark[data-accent='clay'] {
+  --moss: hsl(25 30% 60%);
+}
+
+@layer base {
+  html,
+  body,
+  #root {
+    height: 100%;
+  }
+  body {
+    margin: 0;
+    -webkit-font-smoothing: antialiased;
+    @apply bg-background text-foreground font-sans;
+  }
+}
+
+/* Photo placeholder (diagonal-stripe pattern until the real photo loads). */
+.ph {
+  background-color: hsl(var(--muted));
+  background-image: repeating-linear-gradient(
+    45deg,
+    hsl(var(--foreground) / 0.05) 0 10px,
+    transparent 10px 20px
+  );
+}

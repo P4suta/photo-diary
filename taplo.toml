@@ -1,0 +1,14 @@
+# TOML formatting policy (taplo), enforced by the pre-commit hook and `just fmt`.
+# Validity alone (`taplo check`) is not enough — formatting is part of the
+# convention, checked repo-wide via `taplo fmt --check`.
+# taplo doesn't read .gitignore, so exclude generated trees explicitly (don't format the
+# Tauri auto-generated permission tomls under target/ or gen/).
+exclude = ["dist/**", "node_modules/**", "target/**", "src-tauri/gen/**", "_handoff/**"]
+
+[formatting]
+align_comments = false # keep trailing comments one space after the value
+column_width = 100
+indent_string = "  " # two spaces — matches package.json / biome.json
+reorder_keys = false # key order is semantically meaningful (mise.toml comments)
+reorder_arrays = false
+array_auto_collapse = false

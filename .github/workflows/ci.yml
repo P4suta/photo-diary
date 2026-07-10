@@ -1,0 +1,72 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+# One in-flight run per ref; a new push cancels the previous.
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      # Provisions the exact toolchain pinned in mise.toml (node, pnpm, biome,
+      # just, typos, …) — the same versions developers get locally.
+      - name: Install toolchain (mise)
+        uses: jdx/mise-action@v2
+
+      # --frozen-lockfile: fail if pnpm-lock.yaml is out of date rather than
+      # silently resolving new versions.
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      # typecheck + Biome + typos + tests — identical to the pre-push hook.
+      - name: Check
+        run: just check
+
+      - name: Build
+        run: just build
+
+  # E2E is heavy (browser), so it's split into its own job. Not part of pre-push / check.
+  e2e:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install toolchain (mise)
+        uses: jdx/mise-action@v2
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      # The browser binary is outside mise's management; let Playwright fetch it in the job.
+      - name: Install Playwright browser
+        run: pnpm exec playwright install --with-deps chromium
+
+      - name: E2E
+        run: just e2e
+
+  rust:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install toolchain (mise)
+        uses: jdx/mise-action@v2
+
+      # Run fast against the pure core (photo-diary-core). The Tauri shell is compile-checked locally.
+      - name: Format check
+        run: cargo fmt --all -- --check
+      - name: Clippy
+        run: cargo clippy -p photo-diary-core --all-targets -- -D warnings
+      - name: Test
+        run: cargo test -p photo-diary-core

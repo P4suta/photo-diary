@@ -1,0 +1,146 @@
+{
+  "nav": {
+    "timeline": "タイムライン",
+    "calendar": "カレンダー",
+    "highlights": "ハイライト",
+    "settings": "設定"
+  },
+  "brand": {
+    "subtitle": "写真日記"
+  },
+  "unit": {
+    "photo_other": "{{count, number}}枚",
+    "day_other": "{{count, number}}日"
+  },
+  "sidebar": {
+    "lastImport": "最終取り込み {{time}}"
+  },
+  "topbar": {
+    "addPhotos": "写真を追加"
+  },
+  "search": {
+    "placeholder": "検索…",
+    "close": "検索を閉じる",
+    "periodHeading": "期間",
+    "placeHeading": "場所",
+    "clear": "クリア",
+    "apply": "適用",
+    "period": {
+      "today": "今日",
+      "thisWeek": "今週",
+      "thisMonth": "今月",
+      "thisYear": "今年",
+      "todayLastYear": "去年の今日"
+    }
+  },
+  "day": {
+    "today": "今日",
+    "noPhotos": "写真なし",
+    "noRecord": "記録なし",
+    "writeNote": "ノートを書く…",
+    "clickToEdit": "クリックして編集",
+    "notePlaceholder": "今日のこと、数行だけ。"
+  },
+  "photo": {
+    "open": "写真を開く",
+    "note": "メモ"
+  },
+  "digest": {
+    "showAll": "すべて表示"
+  },
+  "event": {
+    "label": "イベント",
+    "noteSuffix": " · ノート"
+  },
+  "lightbox": {
+    "close": "閉じる (Esc)",
+    "prev": "前へ (←)",
+    "next": "次へ (→)",
+    "starred": "★ ピックアップ済み",
+    "star": "★ ピックアップ",
+    "footerHint": "i 情報 / S ★",
+    "photoInfo": "写真の情報",
+    "storedInLibrary": "ライブラリに保管済み",
+    "fieldTakenAt": "撮影日時",
+    "fieldPlace": "場所",
+    "fieldDimensions": "寸法（フル解像度）",
+    "fieldStoredSize": "保管サイズ",
+    "fieldFilename": "元ファイル名",
+    "noPlace": "場所情報なし",
+    "importedAt": "取り込み: {{time}}",
+    "exportCopy": "このコピーを書き出す",
+    "exportHint": "フル解像度の AVIF ファイルを任意の場所へ保存します。"
+  },
+  "calendar": {
+    "prevMonth": "前の月",
+    "nextMonth": "次の月",
+    "today": "今日へ",
+    "month": "月",
+    "year": "年",
+    "note": "ノート",
+    "less": "少",
+    "more": "多",
+    "yearSummary": "{{days, number}}日の記録 · {{count, number}}枚"
+  },
+  "highlights": {
+    "title": "ハイライト",
+    "subtitle": "{{count, number}}枚 — すべて自分で選んだもの"
+  },
+  "settings": {
+    "title": "設定",
+    "watchedFolders": "監視フォルダ",
+    "watchedFoldersDesc": "追加したフォルダを監視し、新しい写真を自動で取り込みます。取り込んだ写真は日記の中に保管されるため、原本はあとで移動・削除しても構いません。",
+    "addFolder": "フォルダを追加…",
+    "internalLibrary": "内部ライブラリ",
+    "internalLibraryDesc": "すべての写真はフル解像度・視覚的ロスレスの AVIF としてここに恒久保管されます。",
+    "statTotalUsed": "総使用容量",
+    "statPhotos": "写真",
+    "statRecordedDays": "記録のある日",
+    "photoUnit": "枚",
+    "dayUnit": "日",
+    "storageLocation": "保管場所",
+    "openFolder": "フォルダを開く",
+    "thumbnailCache": "サムネイルキャッシュ",
+    "thumbnailCacheNote": " · 削除しても写真には影響しません",
+    "regenerate": "再生成",
+    "clear": "クリア",
+    "appearance": "外観",
+    "language": "言語",
+    "theme": "テーマ",
+    "accent": "アクセント",
+    "emptyDays": "記録なしの日",
+    "themeLight": "ライト",
+    "themeDark": "ダーク",
+    "themeSystem": "システム",
+    "accentMoss": "モス",
+    "accentDusk": "ダスク",
+    "accentClay": "クレイ",
+    "show": "薄く表示",
+    "hide": "隠す",
+    "viewTokens": "デザイントークンを見る →",
+    "watching": "監視中",
+    "disconnected": "未接続",
+    "lastScan": "最終スキャン {{time}}",
+    "rescan": "再スキャン",
+    "remove": "削除"
+  },
+  "onboarding": {
+    "title": "写真から、日記がはじまります",
+    "body": "フォルダを追加すると、写真は撮影日ごとに並び、日記のライブラリへコピーして保管されます。フル解像度のまま軽量な AVIF に最適化されるので、<strong>原本はいっさい変更されず、取り込み後に削除しても写真はここに残ります。</strong>",
+    "chooseFolder": "フォルダを選ぶ…",
+    "orDrop": "または、ここに写真をドロップ",
+    "formats": "対応形式: JPEG · HEIC · PNG · WebP · AVIF",
+    "viewDemo": "→ デモのタイムラインを見る"
+  },
+  "import": {
+    "importing": "取り込み中 · {{done}} / {{total}}",
+    "optimizing": "最適化コピー · 残り約{{minutes}}分",
+    "close": "閉じる",
+    "importingCount": "{{count, number}}枚を取り込んでいます",
+    "body": "フル解像度の AVIF に最適化しながら、日記のライブラリへコピーしています。原本は変更されません。",
+    "remaining": "残り 約{{minutes}}分",
+    "saved": "ここまでの節約: 元 {{from}} → 保管 {{to}}",
+    "pause": "一時停止",
+    "continueBackground": "バックグラウンドで続行"
+  }
+}

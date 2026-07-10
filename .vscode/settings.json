@@ -1,0 +1,57 @@
+{
+  // ── Formatter / linter = Biome ────────────────────────────────────────────
+  // biome.json is the single source of truth (indentStyle=space / indentWidth=2 /
+  // lineWidth=100; for JS quoteStyle=single, semicolons=asNeeded, trailingCommas=all).
+  // Format on save with the same settings so local == CI (the biome in just check /
+  // pre-commit). Make Biome the default formatter for TS/TSX/JSON/JSONC.
+  "editor.defaultFormatter": "biomejs.biome",
+  "editor.formatOnSave": true,
+  // Organize imports on save (Biome's organizeImports); keeps diffs stable and keeps
+  // manual-formatting drift out of CI.
+  "editor.codeActionsOnSave": {
+    "source.organizeImports.biome": "explicit"
+  },
+  // Assign Biome per language explicitly so no other formatter wins the extension race.
+  "[typescript]": {
+    "editor.defaultFormatter": "biomejs.biome"
+  },
+  "[typescriptreact]": {
+    "editor.defaultFormatter": "biomejs.biome"
+  },
+  "[json]": {
+    "editor.defaultFormatter": "biomejs.biome"
+  },
+  "[jsonc]": {
+    "editor.defaultFormatter": "biomejs.biome"
+  },
+  // CSS is outside Biome (biome.json's files.includes excludes it with "!**/*.css";
+  // the token formatting in src/index.css must not be touched by Biome). Leave no
+  // default formatter assigned here.
+
+  // ── TOML ──────────────────────────────────────────────────────────────────
+  // mise.toml / taplo.toml etc. taplo (just fmt / the taplo fmt --check in pre-commit)
+  // is authoritative; on editor save, match it with even-better-toml.
+  "[toml]": {
+    "editor.formatOnSave": true,
+    "editor.defaultFormatter": "tamasfe.even-better-toml"
+  },
+  "evenBetterToml.formatter.alignEntries": false,
+
+  // ── Tailwind ──────────────────────────────────────────────────────────────
+  // tailwind.config.ts exists, so enable IntelliSense. The truth for tokens is the CSS
+  // variables in src/index.css; the config only bridges them into Tailwind. Make
+  // completion work in .tsx className and the cn() helper.
+  "tailwindCSS.experimental.classRegex": [["cn\\(([^)]*)\\)", "[\"'`]([^\"'`]*)[\"'`]"]],
+
+  // ── Workspace ─────────────────────────────────────────────────────────────
+  // dist is Vite's build output, node_modules is pnpm's dependency tree. Both are
+  // generated, so exclude them from search and file watching to keep the editor light.
+  "search.exclude": {
+    "dist/**": true,
+    "node_modules/**": true
+  },
+  "files.watcherExclude": {
+    "dist/**": true,
+    "node_modules/**": true
+  }
+}

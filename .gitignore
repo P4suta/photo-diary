@@ -1,0 +1,44 @@
+# Dependencies (pnpm store is global; only the project's node_modules is local).
+node_modules/
+
+# Build output / caches
+dist/
+dist-ssr/
+.vite/
+*.local
+*.tsbuildinfo
+
+# Test artifacts (vitest coverage, Playwright reports/output/browser cache)
+coverage/
+playwright-report/
+test-results/
+blob-report/
+.playwright/
+
+# Rust / Cargo (photo-diary-core crate, and the Tauri shell in phase 2)
+target/
+# Tauri generated bundle output
+src-tauri/gen/
+
+# Editor / OS state
+.DS_Store
+.idea/
+*.suo
+*.sw?
+
+# Logs
+*-debug.log*
+
+# Local-only mise tool overrides
+mise.local.toml
+.mise.local.toml
+
+# Claude Code local settings (launch.json stays tracked for the preview server)
+.claude/settings.local.json
+
+# Internal working notes — never publish (mirrors find-my-files)
+CLAUDE.md
+
+# Design handoff bundle (reference only, not app source)
+_handoff/
+*-handoff.zip

@@ -1,0 +1,40 @@
+# Git hooks for photo-diary. Installed by `just setup` (lefthook install).
+# Do not bypass with --no-verify — CI runs the same gate and will fail anyway.
+
+commit-msg:
+  jobs:
+    # Conventional Commits — keeps history well-formed for future release
+    # automation. {1} = the commit-message file git hands the commit-msg hook.
+    # committed skips fixup!/merge commits, so autosquash rebases still work.
+    - name: conventional-commit
+      run: committed --commit-file {1}
+
+pre-commit:
+  parallel: true
+  jobs:
+    # Biome over the staged TS/TSX/JSON only ({staged_files}) so the hook is fast.
+    # --no-errors-on-unmatched: a docs-only commit stages no JS and is a no-op.
+    - name: biome
+      glob: "*.{ts,tsx,js,jsx,json,jsonc}"
+      run: biome check --no-errors-on-unmatched {staged_files}
+    # Spell-check the whole working tree (fast; config in _typos.toml).
+    - name: typos
+      run: typos
+    # Enforce TOML *formatting*, not just validity (taplo.toml is repo policy).
+    - name: taplo
+      glob: "*.toml"
+      run: taplo fmt --check
+
+pre-push:
+  jobs:
+    # The full gate before code leaves the machine — one definition, shared with
+    # CI (`just check` = typecheck + Biome + typos + tests). Nothing here is
+    # skippable. E2E (Playwright) is heavy and runs in a separate CI job only.
+    - name: check
+      run: just check
+    # The Rust-side gate, mirrored from CI — only when Rust files are in the push
+    # (glob-filtered; a JS-only push skips it). `just check-rust` = cargo test +
+    # clippy -D warnings + `cargo fmt --check`.
+    - name: rust-gate
+      glob: "{*.rs,**/Cargo.toml,Cargo.lock,rustfmt.toml}"
+      run: just check-rust

@@ -1,0 +1,37 @@
+{
+  // Run with Terminal → Run Task… (or Ctrl+Shift+B for the default build task).
+  // Each task is a thin call into a `just` recipe — the justfile is the single
+  // source of truth for how things run, which keeps local == CI inside VS Code too.
+  "version": "2.0.0",
+  "tasks": [
+    {
+      "label": "check",
+      "detail": "just check — typecheck + Biome + typos (the full gate, same as CI)",
+      "type": "shell",
+      "command": "just",
+      "args": ["check"],
+      "group": { "kind": "build", "isDefault": true },
+      // Surface tsc output in the Problems panel (typecheck is part of check).
+      "problemMatcher": ["$tsc"]
+    },
+    {
+      "label": "build",
+      "detail": "just build — production build (tsc -b && vite build)",
+      "type": "shell",
+      "command": "just",
+      "args": ["build"],
+      "group": "build",
+      "problemMatcher": ["$tsc"]
+    },
+    {
+      "label": "dev (vite watch)",
+      "detail": "just dev — Vite dev server http://localhost:5173 (rebuilds on save)",
+      "type": "shell",
+      "command": "just",
+      "args": ["dev"],
+      // Vite is a long-running process; keep it running instead of treating it as done.
+      "isBackground": true,
+      "problemMatcher": ["$tsc-watch"]
+    }
+  ]
+}
