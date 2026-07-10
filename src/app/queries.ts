@@ -1,5 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import type { ImportProgress } from '@/domain/models'
+import type { DayEntry, HighlightsData, ImportProgress } from '@/domain/models'
+import { flipStarInHighlights, flipStarInTimeline } from '@/domain/star'
 import { useLibrary } from './library-context'
 import { useToday } from './today'
 
@@ -90,8 +91,32 @@ export function useToggleStar() {
   const qc = useQueryClient()
   return useMutation({
     mutationFn: (photoId: string) => library.toggleStar(photoId),
-    // Starring changes the timeline, the highlights grid and the starred count.
-    onSuccess: () => {
+    // Optimistically flip the photo in-place across the timeline and highlights caches.
+    // This makes the star respond instantly and — crucially — writes the fresh value
+    // into the highlights cache *before* the refetch's starred-only filter drops an
+    // un-starred photo, so the lightbox can read it (the photo would otherwise vanish
+    // with only its stale starred=true ever observed).
+    onMutate: async (photoId) => {
+      await qc.cancelQueries({ queryKey: qk.timeline })
+      await qc.cancelQueries({ queryKey: qk.highlights })
+      const prevTimeline = qc.getQueriesData<DayEntry[]>({ queryKey: qk.timeline })
+      const prevHighlights = qc.getQueriesData<HighlightsData>({ queryKey: qk.highlights })
+      qc.setQueriesData<DayEntry[]>({ queryKey: qk.timeline }, (days) =>
+        days ? flipStarInTimeline(days, photoId) : days,
+      )
+      qc.setQueriesData<HighlightsData>({ queryKey: qk.highlights }, (data) =>
+        data ? flipStarInHighlights(data, photoId) : data,
+      )
+      return { prevTimeline, prevHighlights }
+    },
+    // On failure, restore both caches to their exact pre-toggle snapshots (rollback).
+    onError: (_err, _photoId, ctx) => {
+      for (const [key, data] of ctx?.prevTimeline ?? []) qc.setQueryData(key, data)
+      for (const [key, data] of ctx?.prevHighlights ?? []) qc.setQueryData(key, data)
+    },
+    // Reconcile with the backend regardless of outcome. Starring also changes the
+    // highlights grid and the starred count.
+    onSettled: () => {
       qc.invalidateQueries({ queryKey: qk.timeline })
       qc.invalidateQueries({ queryKey: qk.highlights })
       qc.invalidateQueries({ queryKey: qk.stats })

@@ -4,7 +4,6 @@ import { HighlightsView } from '@/features/highlights/HighlightsView'
 import { SettingsView } from '@/features/library/SettingsView'
 import { EmptyState } from '@/features/onboarding/EmptyState'
 import { AppShell } from '@/features/shell/AppShell'
-import { DayDetailView } from '@/features/timeline/DayDetailView'
 import { TimelineView } from '@/features/timeline/TimelineView'
 import { TokensView } from '@/features/tokens/TokensView'
 
@@ -13,7 +12,9 @@ export const router = createBrowserRouter([
     element: <AppShell />,
     children: [
       { path: '/', element: <TimelineView /> },
-      { path: 'day', element: <DayDetailView /> },
+      // The day-detail screen (2b, virtual scroll) is not built — DayDetailView is a
+      // static English mock, so it stays unrouted (unreachable) until phase 2b wires it
+      // as `/day/:date` from real data.
       { path: '/calendar', element: <CalendarView /> },
       { path: '/highlights', element: <HighlightsView /> },
       { path: '/settings', element: <SettingsView /> },

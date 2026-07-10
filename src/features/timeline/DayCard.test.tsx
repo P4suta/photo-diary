@@ -78,10 +78,11 @@ describe('DayCard exhaustive switch', () => {
     expect(screen.getAllByLabelText('Open photo').length).toBeGreaterThanOrEqual(2)
   })
 
-  it('digest: renders the moss count, "Show all", and clusters', () => {
+  it('digest: renders the moss count, overflow tile, and clusters', () => {
     renderWithProviders(<DayCard day={days.digest} />)
     expect(screen.getByText('4,318 photos')).toBeInTheDocument()
-    expect(screen.getByLabelText('Show all')).toBeInTheDocument()
+    // The overflow tile shows the count of hidden photos but is not an interactive action.
+    expect(screen.queryByLabelText('Show all')).toBeNull()
     expect(screen.getByText('Departure')).toBeInTheDocument()
   })
 

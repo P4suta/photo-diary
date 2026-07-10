@@ -24,6 +24,10 @@
   --accent-foreground: 30 8% 16%;
   --destructive: 5 55% 46%;
   --moss: hsl(155 22% 40%);
+  /* Always-dark lightbox chrome and the dark text on the constant-white photo hover
+     chips — both are theme-independent, so they live only here (no .dark override). */
+  --lightbox-backdrop: hsl(30 5% 7%);
+  --overlay-chip-fg: hsl(30 8% 16%);
   --heat-1: color-mix(in oklab, var(--moss) 28%, transparent);
   --heat-2: color-mix(in oklab, var(--moss) 52%, transparent);
   --heat-3: color-mix(in oklab, var(--moss) 76%, transparent);

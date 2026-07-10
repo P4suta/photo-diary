@@ -69,6 +69,7 @@ function NoteOnlyCard({ day }: { day: Extract<DayEntry, { kind: 'note_only' }> }
 function PhotosCard({ day }: { day: Extract<DayEntry, { kind: 'photos' }> }) {
   const { t, i18n } = useTranslation()
   const openLightbox = useUi((s) => s.openLightbox)
+  const photoIds = day.photos.map((p) => p.id)
   const cols = day.photos.length <= 4 ? 'columns-2' : 'columns-3'
   return (
     <article className="bg-card border border-border rounded-lg shadow-card px-5 pt-4 pb-4">
@@ -87,7 +88,9 @@ function PhotosCard({ day }: { day: Extract<DayEntry, { kind: 'photos' }> }) {
           <PhotoTile
             key={p.id}
             photo={p}
-            onOpen={() => openLightbox(day.photos, i, formatMonthDay(day.date, i18n.language))}
+            onOpen={() =>
+              openLightbox(photoIds, i, formatMonthDay(day.date, i18n.language), 'timeline')
+            }
           />
         ))}
       </div>

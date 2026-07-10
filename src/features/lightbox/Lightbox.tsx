@@ -1,30 +1,71 @@
 import { type ReactNode, useEffect, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
-import { useToggleStar } from '@/app/queries'
-import { useUi } from '@/app/ui-store'
-import type { Photo } from '@/domain/models'
+import { useHighlights, useTimeline, useToggleStar } from '@/app/queries'
+import { type LightboxState, useUi } from '@/app/ui-store'
+import type { DayEntry, HighlightsData, Photo } from '@/domain/models'
 import { cn } from '@/lib/cn'
 import { formatImportedAt, formatTakenAt } from '@/lib/datetime'
 import { formatBytes } from '@/lib/format'
 import { Button } from '@/ui/Button'
 import { ChevronLeftIcon, ChevronRightIcon, CloseIcon, DownloadIcon } from '@/ui/icons'
 
-/** Photo lightbox (1c) plus star/caption during viewing (3b). Always dark. */
+/**
+ * Photo lightbox (1c) plus star/caption during viewing (3b). Always dark.
+ *
+ * The strip is stored as photo ids + the query that backs them; the actual Photo objects
+ * are resolved *live* from that query's cache, so a star toggled here (or anywhere) is
+ * reflected without a stale snapshot drifting out of sync.
+ */
 export function Lightbox() {
-  const { t } = useTranslation()
   const lightbox = useUi((s) => s.lightbox)
+  if (!lightbox) return null
+  return lightbox.source === 'highlights' ? (
+    <HighlightsLightbox state={lightbox} />
+  ) : (
+    <TimelineLightbox state={lightbox} />
+  )
+}
+
+/** Resolve the strip from the live timeline cache (day photos + digest covers). */
+function TimelineLightbox({ state }: { state: LightboxState }) {
+  const days = useTimeline().data
+  return <LightboxView state={state} live={photosFromTimeline(days)} />
+}
+
+/** Resolve the strip from the live highlights cache. */
+function HighlightsLightbox({ state }: { state: LightboxState }) {
+  const data = useHighlights().data
+  return <LightboxView state={state} live={photosFromHighlights(data)} />
+}
+
+function photosFromTimeline(days: DayEntry[] | undefined): Map<string, Photo> {
+  const m = new Map<string, Photo>()
+  for (const d of days ?? []) {
+    if (d.kind === 'photos') for (const p of d.photos) m.set(p.id, p)
+    else if (d.kind === 'digest') for (const p of d.cover) m.set(p.id, p)
+  }
+  return m
+}
+
+function photosFromHighlights(data: HighlightsData | undefined): Map<string, Photo> {
+  const m = new Map<string, Photo>()
+  for (const month of data?.months ?? []) for (const p of month.photos) m.set(p.id, p)
+  return m
+}
+
+function LightboxView({ state, live }: { state: LightboxState; live: Map<string, Photo> }) {
+  const { t } = useTranslation()
   const close = useUi((s) => s.closeLightbox)
   const next = useUi((s) => s.lightboxNext)
   const prev = useUi((s) => s.lightboxPrev)
   const toggleStar = useToggleStar()
-
   const [infoOpen, setInfoOpen] = useState(true)
-  const [starred, setStarred] = useState(false)
 
-  // Sync the star state whenever the index/photo changes.
-  useEffect(() => {
-    if (lightbox) setStarred(lightbox.photos[lightbox.index]?.starred ?? false)
-  }, [lightbox])
+  // Stable working set: values track the live cache, but keys are retained for the whole
+  // open session. So a photo un-starred from Highlights — which the starred-only filter
+  // then drops from that query — stays on screen carrying its last (fresh) star state.
+  const workingSet = useRef(new Map<string, Photo>())
+  for (const [id, p] of live) workingSet.current.set(id, p)
 
   // Keep the latest mutate in a ref so the key handler registers only once.
   const mutateRef = useRef(toggleStar.mutate)
@@ -49,11 +90,8 @@ export function Lightbox() {
           break
         case 's':
         case 'S': {
-          const p = lb.photos[lb.index]
-          if (p) {
-            mutateRef.current(p.id)
-            setStarred((v) => !v)
-          }
+          const id = lb.ids[lb.index]
+          if (id) mutateRef.current(id)
           break
         }
       }
@@ -62,17 +100,13 @@ export function Lightbox() {
     return () => window.removeEventListener('keydown', onKey)
   }, [close, next, prev])
 
-  if (!lightbox) return null
-  const photo = lightbox.photos[lightbox.index]
+  const photo = workingSet.current.get(state.ids[state.index])
   if (!photo) return null
-
-  const toggleStarNow = () => {
-    mutateRef.current(photo.id)
-    setStarred((v) => !v)
-  }
+  const starred = photo.starred
+  const toggleStarNow = () => mutateRef.current(photo.id)
 
   return (
-    <div className="dark fixed inset-0 z-50 flex bg-[hsl(30_5%_7%)] text-foreground">
+    <div className="dark fixed inset-0 z-50 flex bg-[color:var(--lightbox-backdrop)] text-foreground">
       {/* Viewer */}
       <div className="flex-1 min-w-0 relative flex items-center justify-center">
         <button
@@ -118,8 +152,7 @@ export function Lightbox() {
 
         <div className="absolute bottom-4 inset-x-0 flex justify-center">
           <span className="font-mono text-[11px] text-muted-foreground bg-black/30 rounded px-2 py-1">
-            {lightbox.index + 1} / {lightbox.photos.length} · {lightbox.context} ·{' '}
-            {t('lightbox.footerHint')}
+            {state.index + 1} / {state.ids.length} · {state.context} · {t('lightbox.footerHint')}
           </span>
         </div>
       </div>

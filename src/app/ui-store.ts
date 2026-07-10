@@ -1,18 +1,23 @@
 import { create } from 'zustand'
-import type { ImportProgress, Photo } from '@/domain/models'
+import type { ImportProgress } from '@/domain/models'
 
-interface LightboxState {
-  photos: Photo[]
+/** Which query cache backs the open strip, so the lightbox resolves live photos from it. */
+export type LightboxSource = 'timeline' | 'highlights'
+
+export interface LightboxState {
+  /** Photo ids of the strip; the actual photos are resolved live from `source`'s cache. */
+  ids: string[]
   index: number
   /** Heading context (e.g. 'July 4') */
   context: string
+  source: LightboxSource
 }
 
 export type ImportState = 'closed' | 'panel' | 'toast'
 
 interface UiStore {
   lightbox: LightboxState | null
-  openLightbox: (photos: Photo[], index: number, context: string) => void
+  openLightbox: (ids: string[], index: number, context: string, source: LightboxSource) => void
   closeLightbox: () => void
   lightboxNext: () => void
   lightboxPrev: () => void
@@ -33,7 +38,7 @@ interface UiStore {
 
 export const useUi = create<UiStore>((set) => ({
   lightbox: null,
-  openLightbox: (photos, index, context) => set({ lightbox: { photos, index, context } }),
+  openLightbox: (ids, index, context, source) => set({ lightbox: { ids, index, context, source } }),
   closeLightbox: () => set({ lightbox: null }),
   lightboxNext: () =>
     set((s) =>
@@ -41,7 +46,7 @@ export const useUi = create<UiStore>((set) => ({
         ? {
             lightbox: {
               ...s.lightbox,
-              index: Math.min(s.lightbox.index + 1, s.lightbox.photos.length - 1),
+              index: Math.min(s.lightbox.index + 1, s.lightbox.ids.length - 1),
             },
           }
         : s,

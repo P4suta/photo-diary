@@ -52,15 +52,43 @@ describe('DigestCard', () => {
     expect(screen.getByText('+4,314')).toBeInTheDocument()
   })
 
-  it('4 cover buttons + a "Show all" button', () => {
+  it('4 cover buttons + a non-interactive overflow tile', () => {
     renderWithProviders(<DigestCard day={digest} />)
     expect(screen.getAllByLabelText('Open photo')).toHaveLength(4)
-    expect(screen.getByLabelText('Show all')).toBeInTheDocument()
+    // The overflow indicator shows how many more photos exist (real data), but is not a
+    // clickable action until the day-detail screen (2b) is built.
+    expect(screen.queryByLabelText('Show all')).toBeNull()
+    expect(screen.getByText('+4,314')).toBeInTheDocument()
   })
 
   it('lists clusters with time and label', () => {
     renderWithProviders(<DigestCard day={digest} />)
     expect(screen.getByText('Departure')).toBeInTheDocument()
     expect(screen.getByText('Kenroku-en')).toBeInTheDocument()
+  })
+
+  it('renders real cover thumbnails when photos carry a thumbUrl', () => {
+    const withThumbs: Extract<DayEntry, { kind: 'digest' }> = {
+      ...digest,
+      cover: [
+        { ...photo('c1'), thumbUrl: 'asset://c1.avif' },
+        { ...photo('c2'), thumbUrl: 'asset://c2.avif' },
+        { ...photo('c3'), thumbUrl: 'asset://c3.avif' },
+        { ...photo('c4'), thumbUrl: 'asset://c4.avif' },
+      ],
+    }
+    renderWithProviders(<DigestCard day={withThumbs} />)
+    const tiles = screen.getAllByLabelText('Open photo')
+    const imgs = tiles.map((t) => t.querySelector('img'))
+    expect(imgs.filter(Boolean)).toHaveLength(4)
+    expect(imgs[0]).toHaveAttribute('src', 'asset://c1.avif')
+    expect(tiles[0].className).not.toContain('ph')
+  })
+
+  it('falls back to the .ph placeholder when cover photos have no thumbUrl', () => {
+    renderWithProviders(<DigestCard day={digest} />)
+    const tiles = screen.getAllByLabelText('Open photo')
+    expect(tiles[0].querySelector('img')).toBeNull()
+    expect(tiles[0].className).toContain('ph')
   })
 })

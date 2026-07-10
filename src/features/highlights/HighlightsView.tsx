@@ -31,6 +31,7 @@ export function HighlightsView() {
 
       {data.months.map((m) => {
         const label = formatMonthLabel(m.yearMonth, i18n.language)
+        const photoIds = m.photos.map((p) => p.id)
         return (
           <section key={m.yearMonth} className="mt-5">
             <div className="flex items-baseline gap-2">
@@ -45,7 +46,7 @@ export function HighlightsView() {
                   key={p.id}
                   photo={p}
                   size="grid"
-                  onOpen={() => openLightbox(m.photos, i, label)}
+                  onOpen={() => openLightbox(photoIds, i, label, 'highlights')}
                 />
               ))}
             </div>

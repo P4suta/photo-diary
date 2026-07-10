@@ -1,9 +1,9 @@
-import { act } from '@testing-library/react'
-import { describe, expect, it } from 'vitest'
+import { act, screen } from '@testing-library/react'
+import { describe, expect, it, vi } from 'vitest'
 import { axe } from 'vitest-axe'
 import { useUi } from '@/app/ui-store'
-import type { Photo } from '@/domain/models'
-import { renderWithProviders } from '@/test/utils'
+import type { DayEntry, Photo } from '@/domain/models'
+import { makeFakeLibrary, renderWithProviders } from '@/test/utils'
 import { Lightbox } from './Lightbox'
 
 function photo(id: string): Photo {
@@ -27,10 +27,22 @@ function photo(id: string): Photo {
   }
 }
 
+const day: DayEntry = {
+  kind: 'photos',
+  date: '2026-07-05',
+  place: null,
+  today: false,
+  note: null,
+  photos: [photo('a')],
+}
+
 describe('Lightbox a11y', () => {
   it('has no axe violations when open', async () => {
-    const { container } = renderWithProviders(<Lightbox />)
-    act(() => useUi.getState().openLightbox([photo('a')], 0, 'July 5'))
+    // The lightbox resolves its photo from the timeline cache, so seed it there.
+    const library = makeFakeLibrary({ listTimeline: vi.fn().mockResolvedValue([day]) })
+    const { container } = renderWithProviders(<Lightbox />, { library })
+    act(() => useUi.getState().openLightbox(['a'], 0, 'July 5', 'timeline'))
+    await screen.findByText('Photo info')
     const opts = { rules: { region: { enabled: false }, 'color-contrast': { enabled: false } } }
     expect(await axe(container, opts)).toHaveNoViolations()
   })

@@ -8,11 +8,11 @@ import type {
   ImportProgress,
   ImportResult,
   LibraryStats,
-  Photo,
   PlaceFacet,
   WatchedFolder,
 } from '@/domain/models'
 import type { PhotoLibrary } from '@/domain/ports'
+import { flipStarInPhotos, flipStarInTimeline } from '@/domain/star'
 import {
   folders,
   heatCounts,
@@ -141,21 +141,11 @@ export class MockPhotoLibrary implements PhotoLibrary {
 
   toggleStar(photoId: string): Promise<void> {
     // Rebuild the timeline and highlights immutably so the flip is a fresh reference.
-    this.days = this.days.map((d) => {
-      if (d.kind === 'photos') return { ...d, photos: flip(d.photos, photoId) }
-      if (d.kind === 'digest') return { ...d, cover: flip(d.cover, photoId) }
-      return d
-    })
+    this.days = flipStarInTimeline(this.days, photoId)
     this.highlightMonths = this.highlightMonths.map((m) => ({
       ...m,
-      photos: flip(m.photos, photoId),
+      photos: flipStarInPhotos(m.photos, photoId),
     }))
     return Promise.resolve()
   }
-}
-
-/** Return a new photo array with the matching id's `starred` flipped (others untouched). */
-function flip(photos: Photo[], id: string): Photo[] {
-  if (!photos.some((p) => p.id === id)) return photos
-  return photos.map((p) => (p.id === id ? { ...p, starred: !p.starred } : p))
 }

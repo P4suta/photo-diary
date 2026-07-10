@@ -47,7 +47,8 @@ export function SettingsView() {
                   <FolderRow key={f.id} folder={f} />
                 ))}
               </div>
-              <Button variant="outline" className="mt-3">
+              {/* Adding folders isn't wired yet — disable rather than show a dead control. */}
+              <Button variant="outline" className="mt-3" disabled>
                 {t('settings.addFolder')}
               </Button>
             </section>
@@ -79,7 +80,7 @@ export function SettingsView() {
                     </div>
                     <div className="font-mono text-[12px] truncate mt-0.5">{stats.location}</div>
                   </div>
-                  <Button variant="outline" size="sm" className="ml-auto shrink-0">
+                  <Button variant="outline" size="sm" className="ml-auto shrink-0" disabled>
                     {t('settings.openFolder')}
                   </Button>
                 </div>
@@ -95,11 +96,12 @@ export function SettingsView() {
                       </span>
                     </div>
                   </div>
+                  {/* Cache regeneration/clearing isn't wired yet — disable until implemented. */}
                   <div className="ml-auto flex items-center gap-1.5 shrink-0">
-                    <Button variant="outline" size="sm">
+                    <Button variant="outline" size="sm" disabled>
                       {t('settings.regenerate')}
                     </Button>
-                    <Button variant="ghost" size="sm">
+                    <Button variant="ghost" size="sm" disabled>
                       {t('settings.clear')}
                     </Button>
                   </div>
@@ -184,11 +186,12 @@ function FolderRow({ folder }: { folder: WatchedFolder }) {
         <div className="font-mono text-[12px] truncate">{folder.path}</div>
         <div className="font-mono text-[10px] text-muted-foreground mt-0.5">{status}</div>
       </div>
+      {/* Rescan / remove aren't wired yet — disable (especially the destructive Remove). */}
       <div className="ml-auto flex items-center gap-1.5 shrink-0">
-        <Button variant="outline" size="sm">
+        <Button variant="outline" size="sm" disabled>
           {t('settings.rescan')}
         </Button>
-        <Button variant="danger" size="sm">
+        <Button variant="danger" size="sm" disabled>
           {t('settings.remove')}
         </Button>
       </div>

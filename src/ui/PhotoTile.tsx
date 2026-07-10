@@ -58,14 +58,14 @@ export function PhotoTile({
           <button
             type="button"
             onClick={() => toggleStar.mutate(photo.id)}
-            className="pointer-events-auto h-6 rounded-md bg-white/90 text-[hsl(30_8%_16%)] px-2 text-[11px] hover:bg-white"
+            className="pointer-events-auto h-6 rounded-md bg-white/90 text-[color:var(--overlay-chip-fg)] px-2 text-[11px] hover:bg-white"
           >
             ★
           </button>
           <button
             type="button"
             onClick={onOpen}
-            className="pointer-events-auto h-6 rounded-md bg-white/90 text-[hsl(30_8%_16%)] px-2 text-[11px] hover:bg-white"
+            className="pointer-events-auto h-6 rounded-md bg-white/90 text-[color:var(--overlay-chip-fg)] px-2 text-[11px] hover:bg-white"
           >
             {t('photo.note')}
           </button>

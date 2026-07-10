@@ -47,9 +47,6 @@
     "open": "Open photo",
     "note": "Note"
   },
-  "digest": {
-    "showAll": "Show all"
-  },
   "event": {
     "label": "Event",
     "noteSuffix": " · note"
@@ -130,7 +127,6 @@
     "title": "A diary that begins from photos",
     "body": "Add a folder and your photos line up by capture date, copied into the diary library. They are optimized to lightweight full-resolution AVIF, so <strong>the originals are never modified, and even if you delete them after import your photos stay here.</strong>",
     "chooseFolder": "Choose a folder…",
-    "orDrop": "or drop photos here",
     "formats": "Supported: JPEG · HEIC · PNG · WebP · AVIF",
     "viewDemo": "→ View the demo timeline"
   },
