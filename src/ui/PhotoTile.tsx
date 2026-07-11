@@ -54,10 +54,14 @@ export function PhotoTile({
             ★
           </span>
         )}
-        <div className="pointer-events-none absolute inset-0 rounded-md bg-black/35 opacity-0 group-hover:opacity-100 transition-opacity flex items-end justify-end p-1.5 gap-1">
+        {/* Controls are hidden with opacity:0 but stay in the DOM (and the tab order),
+            so they must reveal on keyboard focus too — group-focus-within surfaces them
+            when the star/note button gains focus, matching the hover affordance. */}
+        <div className="pointer-events-none absolute inset-0 rounded-md bg-black/35 opacity-0 group-hover:opacity-100 group-focus-within:opacity-100 transition-opacity flex items-end justify-end p-1.5 gap-1">
           <button
             type="button"
             onClick={() => toggleStar.mutate(photo.id)}
+            aria-label={t(photo.starred ? 'photo.unstar' : 'photo.star')}
             className="pointer-events-auto h-6 rounded-md bg-white/90 text-[color:var(--overlay-chip-fg)] px-2 text-[11px] hover:bg-white"
           >
             ★

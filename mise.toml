@@ -1,33 +1,34 @@
 # Toolchain pinning for photo-diary.
 # This machine manages tools via chezmoi + mise — do NOT install toolchains ad hoc;
 # declare them here and run `mise install` (or `just setup`). Local and CI resolve
-# the same versions from this one file.
+# the same versions from this one file. Every tool is EXACT-pinned (no floating
+# majors / "lts") so local and CI resolve byte-identical versions.
 [tools]
-# JS runtime for the Vite/React frontend.
-node = "lts"
+# JS runtime for the Vite/React frontend. Exact-pinned (was "lts").
+node = "24.18.0"
 # Package manager. pnpm over npm: content-addressed store, strict node_modules,
-# fast installs. `packageManager` in package.json records the exact version too.
-pnpm = "10"
+# fast installs. Exact-pinned to match `packageManager` in package.json (pnpm@10.34.4).
+pnpm = "10.34.4"
 # Lint + format for TS/TSX/JSON (biome check / --write). One version, local + CI.
 biome = "2.5.0"
 # Phase 2: the Rust core (photo-diary-core) and Tauri shell (src-tauri). Separate from the
-# global mise rust, we pin the version per-project too, to keep local == CI.
-rust = "1.96"
+# global mise rust, we exact-pin the version per-project too, to keep local == CI.
+rust = "1.96.0"
 # Task runner (justfile). `just setup` provisions hooks; CI runs the same recipes,
-# so bundling/gate logic lives in exactly one place.
-just = "1"
+# so bundling/gate logic lives in exactly one place. Exact-pinned.
+just = "1.54.0"
 # Git-hook manager. `just setup` runs `lefthook install`; pinning it per-repo
-# closes a reproducibility gap and lets `just doctor` verify it.
-lefthook = "2"
+# closes a reproducibility gap and lets `just doctor` verify it. Exact-pinned.
+lefthook = "2.1.9"
 # Source spell-check (pre-commit hook + `just typos`). crate-ci; the github backend
-# fetches the prebuilt binary.
-"github:crate-ci/typos" = "1"
+# fetches the prebuilt binary. Exact-pinned.
+"github:crate-ci/typos" = "1.47.2"
 # Conventional-Commits linter for the commit-msg hook — keeps history well-formed
-# for future release automation. cargo backend, binstalled.
-"cargo:committed" = "1"
+# for future release automation. cargo backend, binstalled. Exact-pinned.
+"cargo:committed" = "1.1.11"
 # TOML formatter (`taplo fmt`) for mise.toml today and the Tauri Cargo.toml in
-# phase 2. cargo backend, binstalled.
-"cargo:taplo-cli" = "0.10"
+# phase 2. cargo backend, binstalled. Exact-pinned.
+"cargo:taplo-cli" = "0.10.0"
 
 [settings]
 # Fetch cargo: backend tools as prebuilt binaries (cargo-binstall) instead of

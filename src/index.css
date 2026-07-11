@@ -1,3 +1,8 @@
+/* Self-hosted Noto Sans JP (variable). A local-first desktop app must not phone
+   Google Fonts and must render fully offline; the woff2 subsets are bundled by Vite.
+   Must precede @tailwind rules (CSS requires @import before other statements). */
+@import '@fontsource-variable/noto-sans-jp/index.css';
+
 @tailwind base;
 @tailwind components;
 @tailwind utilities;

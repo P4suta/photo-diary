@@ -26,7 +26,14 @@ export default {
         destructive: 'hsl(var(--destructive))',
       },
       fontFamily: {
-        sans: ['"Noto Sans JP"', 'system-ui', '-apple-system', '"Hiragino Sans"', 'sans-serif'],
+        sans: [
+          '"Noto Sans JP Variable"',
+          '"Noto Sans JP"',
+          'system-ui',
+          '-apple-system',
+          '"Hiragino Sans"',
+          'sans-serif',
+        ],
         mono: ['ui-monospace', 'SFMono-Regular', 'Menlo', 'Consolas', 'monospace'],
       },
       borderRadius: { lg: '12px', md: '8px', sm: '6px' },

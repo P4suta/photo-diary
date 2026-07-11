@@ -104,10 +104,11 @@ build:
 
 # ── Housekeeping ─────────────────────────────────────────────────────────────
 
-# Remove build output and the Vite cache (keeps node_modules).
+# Remove build output and the Vite cache (keeps node_modules). Portable: a node
+# one-liner runs identically in PowerShell and the Linux devcontainer's sh.
 [group('housekeeping')]
 clean:
-    Remove-Item -Recurse -Force -ErrorAction SilentlyContinue dist, node_modules/.vite
+    pnpm exec node -e "const fs=require('node:fs');for(const p of ['dist','node_modules/.vite'])fs.rmSync(p,{recursive:true,force:true})"
 
 # ── Desktop (Tauri v2 — phase 2) ──────────────────────────────────────────────
 

@@ -43,7 +43,9 @@
   },
   "photo": {
     "open": "写真を開く",
-    "note": "メモ"
+    "note": "メモ",
+    "star": "★を付ける",
+    "unstar": "★を外す"
   },
   "event": {
     "label": "イベント",
@@ -77,7 +79,8 @@
     "note": "ノート",
     "less": "少",
     "more": "多",
-    "yearSummary": "{{days, number}}日の記録 · {{count, number}}枚"
+    "yearSummary": "{{days, number}}日の記録 · {{count, number}}枚",
+    "cellLabel": "{{date}}: {{photos}}"
   },
   "highlights": {
     "title": "ハイライト",

@@ -45,7 +45,9 @@
   },
   "photo": {
     "open": "Open photo",
-    "note": "Note"
+    "note": "Note",
+    "star": "Star photo",
+    "unstar": "Unstar photo"
   },
   "event": {
     "label": "Event",
@@ -79,7 +81,8 @@
     "note": "note",
     "less": "Less",
     "more": "More",
-    "yearSummary": "{{days, number}} days recorded · {{count, number}} photos"
+    "yearSummary": "{{days, number}} days recorded · {{count, number}} photos",
+    "cellLabel": "{{date}}: {{photos}}"
   },
   "highlights": {
     "title": "Highlights",

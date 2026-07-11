@@ -152,8 +152,9 @@ pub fn run() {
     tauri::Builder::default()
         .plugin(tauri_plugin_dialog::init())
         .setup(|app| {
-            // Set up the DB and library storage under the app data directory.
-            let dir = app.path().app_data_dir()?;
+            // Set up the DB and library storage under the app's LOCAL data dir (not Roaming):
+            // a multi-GB AVIF library must not sync in Windows domain/roaming-profile environments.
+            let dir = app.path().app_local_data_dir()?;
             let lib = Library::open(&dir)?;
             app.manage(Arc::new(lib));
             Ok(())

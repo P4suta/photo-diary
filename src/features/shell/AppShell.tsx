@@ -1,7 +1,5 @@
 import { Navigate, Outlet } from 'react-router-dom'
 import { useFolders } from '@/app/queries'
-import { ImportOverlay } from '@/features/import/ImportOverlay'
-import { Lightbox } from '@/features/lightbox/Lightbox'
 import { Sidebar } from './Sidebar'
 import { Toast } from './Toast'
 import { TopBar } from './TopBar'
@@ -21,8 +19,6 @@ export function AppShell() {
           <Outlet />
         </main>
       </div>
-      <Lightbox />
-      <ImportOverlay />
       <Toast />
     </div>
   )
