@@ -2,7 +2,7 @@
 
 Welcome to photo-diary — a desktop photo diary app that runs locally, aiming to sit "halfway between a photo album and a journal." This document collects the day-to-day development loop and the gates you must pass before committing and before pushing. Please read it before you start.
 
-The current repository is Phase 1 (a React/TypeScript/Vite/Tailwind frontend with mocked data). Phase 2 (the Tauri v2 shell + Rust core) has not started yet, so don't pre-emptively add tooling or procedures around it.
+Both phases are implemented: the Phase 1 React/TypeScript/Vite/Tailwind frontend (mock data in browser dev) and the Phase 2 Tauri v2 shell + Rust core (`crates/photo-diary-core`, `src-tauri`), which `TauriPhotoLibrary` wires in at runtime inside the desktop window. If you touch Rust, the `just check-rust` gate (cargo test + clippy + fmt) applies — see below.
 
 ## Setup
 
@@ -32,7 +32,7 @@ When you want to iterate quickly on types alone, use `just typecheck`. When you 
 
 ### The architectural seam
 
-Keep dependencies pointing inward only. The UI depends on the `PhotoLibrary` port in `src/domain/ports.ts` only through `src/app/queries.ts` (TanStack Query) — dependency inversion. Don't break the premise that in Phase 2 you only swap `MockPhotoLibrary` in `src/data/mock/` for `TauriPhotoLibrary`, and the UI passes unchanged. The single source of truth for design tokens is `src/index.css` (`:root` / `.dark` / `[data-accent]` / heat variables), which Tailwind references. Don't hardcode colors or accents (--moss / dusk / clay) as literal values; go through these tokens.
+Keep dependencies pointing inward only. The UI depends on the `PhotoLibrary` port in `src/domain/ports.ts` only through `src/app/queries.ts` (TanStack Query) — dependency inversion. Don't break the premise that `MockPhotoLibrary` (`src/data/mock/`) and `TauriPhotoLibrary` (`src/data/tauri/`) are interchangeable behind that one port, with the UI unchanged regardless of which `providers.tsx` selects at runtime. Note the Rust core returns raw DTOs; grouping/heatmap/calendar/highlights are assembled by the shared pure builders in `src/domain/build/`, not on the Rust side. The single source of truth for design tokens is `src/index.css` (`:root` / `.dark` / `[data-accent]` / heat variables), which Tailwind references. Don't hardcode colors or accents (--moss / dusk / clay) as literal values; go through these tokens.
 
 ## Commit & PR conventions
 
@@ -48,8 +48,10 @@ feat  fix  perf  docs  refactor  test  chore  ci  build  deps  style  revert
 
 ## Before you push
 
-- `just check` (= `typecheck` + `lint` (Biome) + `typos`) must be green. This is exactly the gate the pre-push hook runs, sharing the same definition as CI.
-- Before larger changes it's safe to also confirm `just build` (`tsc -b` + `vite build`) passes (same as CI's last step).
+- `just check` (= `typecheck` + `lint` (Biome) + `typos` + `coverage`, the last enforcing the domain/lib thresholds) must be green. This is exactly the gate the pre-push hook runs, sharing the same definition as CI.
+- If you touched Rust (`crates/photo-diary-core` / `src-tauri`), run `just check-rust` (cargo test + clippy `-D warnings` + `fmt --check`) — the pre-push `rust-gate` runs it too whenever the push includes Rust files.
+- For the whole picture (browser tests + build + E2E) run `just verify`. First E2E run needs the browser once: `pnpm exec playwright install chromium`.
+- Before larger changes it's safe to also confirm `just build` (`tsc -b` + `vite build`) passes (same as CI's build step).
 - If you touched tokens in `src/index.css`, visually check both light/dark and accent switching for breakage.
 
 ### Don't bypass the hooks
@@ -60,7 +62,7 @@ The role of each hook:
 
 - **commit-msg** — `committed` checks Conventional Commits.
 - **pre-commit** — `biome check` on staged TS/TSX/JSON, `typos` on the whole working tree, `taplo fmt --check` on `*.toml` (are they formatted).
-- **pre-push** — `just check` (typecheck + Biome + typos). This one can't be skipped as a whole.
+- **pre-push** — `just check` (typecheck + Biome + typos + coverage), plus `just check-rust` when the push includes Rust files. This one can't be skipped as a whole.
 
 ## Code formatting with Biome
 
@@ -74,7 +76,7 @@ Leave formatting to `just fmt` rather than doing it by hand. Any unformatted spo
 
 ## Local == CI
 
-Reproducibility is the top priority. CI (`ci.yml`) installs the same toolchain as `mise.toml` via `jdx/mise-action`, then runs `pnpm install --frozen-lockfile` → `just check` → `just build`. If `just check` and `just build` are green on your machine, CI should produce the same result. `--frozen-lockfile` fails loudly rather than silently re-resolving when `pnpm-lock.yaml` is stale, so don't forget to commit the lockfile after adding a dependency.
+Reproducibility is the top priority. CI (`ci.yml`) installs the same toolchain as `mise.toml` via `jdx/mise-action`, then runs three jobs mirroring local recipes: **check** (`pnpm install --frozen-lockfile` → `just check` → `just build`), **e2e** (`just e2e` after installing the Playwright browser), and **rust** (an Ubuntu + Windows matrix running `just check-rust`). If those recipes are green on your machine, CI should produce the same result. `--frozen-lockfile` fails loudly rather than silently re-resolving when `pnpm-lock.yaml` is stale, so don't forget to commit the lockfile after adding a dependency.
 
 ## Scope
 

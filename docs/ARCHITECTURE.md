@@ -23,17 +23,21 @@ Dependencies always point inward (domain ← data ← features; app / lib / ui c
 └────────┼─────────────────────────────────────────────────────┘
          │ PhotoLibrary interface (the dependency-inversion face)
 ┌────────▼──────────────────┐        ┌──────────────────────────┐
-│ src/data/mock/            │        │ (Phase 2)                 │
-│  MockPhotoLibrary         │  ⇄ swap │  TauriPhotoLibrary        │
-│  fixtures.ts              │        │  @tauri-apps/api invoke   │
-└────────┬──────────────────┘        └──────────────────────────┘
-         │ import / implements
-┌────────▼─────────────────────────────────────────────────────┐
+│ src/data/mock/            │        │ src/data/tauri/           │
+│  MockPhotoLibrary         │ chosen │  TauriPhotoLibrary        │
+│  fixtures.ts              │ ⇄ at   │  @tauri-apps/api invoke   │
+│  (browser dev)            │ runtime│  → Rust core (Phase 2)    │
+└────────┬──────────────────┘        └──────────┬───────────────┘
+         │ implements                           │ implements
+┌────────▼─────────────────────────────────────▼───────────────┐
 │ src/domain/  models.ts(DayEntry etc.) / ports.ts(PhotoLibrary) │
-│              heatmap.ts / calendar.ts / tokens.ts             │
+│              calendar.ts / heatmap.ts (types) / build/*        │
+│              heat-level.ts / star.ts / tokens.ts              │
 │              pure models & logic (React-free)                 │
 └───────────────────────────────────────────────────────────────┘
 ```
+
+`src/app/providers.tsx` picks the implementation at runtime via `isTauri` (`src/app/env.ts`): `MockPhotoLibrary` in a browser, `TauriPhotoLibrary` inside the Tauri window. Both satisfy the same `PhotoLibrary` port, so the choice is invisible to the UI.
 
 `src/index.css` is the single source of truth for design tokens, referenced (via Tailwind) from any of the layers above.
 
@@ -41,26 +45,32 @@ Dependencies always point inward (domain ← data ← features; app / lib / ui c
 
 Inner layers never import outer layers. `src/domain` depends on neither React nor UI, and `src/features` doesn't depend on the concrete backend.
 
-- **`src/domain/`** — Pure models and logic. React-free; the JSON returned by Phase 2's Rust core is shaped to match these too.
-  - `models.ts` — `Photo` / `DayEntry` (discriminated union, see below) / `TimeCluster` / `WatchedFolder` / `LibraryStats` / `HighlightsData` / `HighlightMonth` / `PlaceFacet` / `AspectRatio`.
+- **`src/domain/`** — Pure models and logic. React-free. The Rust core returns raw DTOs; the pure builders here (not Rust) assemble the port types.
+  - `models.ts` — `Photo` / `DayEntry` (discriminated union, see below) / `TimeCluster` / `EventDay` / `WatchedFolder` / `LibraryStats` / `HighlightsData` / `HighlightMonth` / `PlaceFacet` / `ImportResult` / `ImportProgress` / `AspectRatio`.
   - `ports.ts` — The `PhotoLibrary` interface (the backend seam).
-  - `heatmap.ts` — Yearly heatmap generation (`levelFor` / `buildHeatWeeks`). It uses a deterministic pseudo-random `seeded()`, so the output is identical every time (no `Math.random`).
-  - `calendar.ts` — Month-grid cell generation (`buildMonthCells` → `MonthCell[]`).
+  - `calendar.ts` / `heatmap.ts` — **Type-only** now (`MonthCell`; `HeatWeek` / `HeatCell`). One shared shape for both backends and the UI.
+  - `build/` — The pure builders that turn raw per-record data into port types: `buildTimeline` (day grouping, digest clustering, empty-gap fill), `buildMonthCells`, `buildHeatWeeks`, `groupHighlights`. Deterministic; used by **both** `MockPhotoLibrary` and `TauriPhotoLibrary`.
+  - `heat-level.ts` — The single `count → level` bucket (shared by calendar dots and the heatmap). `star.ts` — starred-set helpers.
   - `tokens.ts` — Design-token reference table (`tokenRows` / `tokenColor`). Values match the CSS variables in `index.css`.
-- **`src/data/mock/`** — The concrete `PhotoLibrary` implementation. The only backend in Phase 1.
-  - `MockPhotoLibrary.ts` — An in-memory `implements PhotoLibrary`.
+- **`src/data/mock/`** — The `PhotoLibrary` implementation used in browser dev.
+  - `MockPhotoLibrary.ts` — An in-memory `implements PhotoLibrary` that feeds fixture records through the same `domain/build` functions.
   - `fixtures.ts` — Fixed data such as `timeline` / `highlights` / `stats` / `folders` / `placeFacets` / `julyRecords`.
+- **`src/data/tauri/`** — The real backend (Phase 2).
+  - `TauriPhotoLibrary.ts` — `implements PhotoLibrary` by calling `invoke`, mapping DTOs to `Photo`, and running the `domain/build` functions on the raw records.
+  - `commands.ts` — Typed `invoke` wrappers + the DTO types (`PhotoDto` / `MonthRecordDto` / `DayCountDto` / …) matching the Rust core's `#[serde(rename_all = "camelCase")]` output.
 - **`src/app/`** — App assembly. Depends on React but not on any specific feature screen.
-  - `providers.tsx` — `QueryClientProvider` + `LibraryProvider`. `MockPhotoLibrary` is created once here.
+  - `providers.tsx` — `QueryClientProvider` + `LibraryProvider`. Instantiates `TauriPhotoLibrary` or `MockPhotoLibrary` once, based on `isTauri`. The `QueryCache` surfaces failures as a toast.
+  - `env.ts` — `isTauri` (detects the Tauri window).
   - `library-context.tsx` — `LibraryProvider` / `useLibrary()`. Hands the port to the UI (no dependency on the concrete class).
-  - `queries.ts` — TanStack Query hooks (`useTimeline`, etc.) and the query keys `qk`.
+  - `queries.ts` — TanStack Query hooks (`useTimeline`, etc.), mutations, and the query keys `qk`.
   - `router.tsx` — react-router route definitions.
   - `theme.ts` — Theme state (Zustand). Reflects `.dark` and `data-accent` onto `<html>`.
-  - `ui-store.ts` — Lightbox / import UI state (Zustand).
-  - `App.tsx` — Just wraps `RouterProvider` in `Providers`.
-- **`src/ui/`** — Small design-system primitives. `Button` / `Segmented` / `PhotoTile` / `icons` (SVGs ported from the design).
+  - `ui-store.ts` — Lightbox / import / toast UI state (Zustand).
+  - `i18n.ts` — i18next init (en/ja). `App.tsx` — wraps `RouterProvider` in `Providers`.
+- **`src/ui/`** — Small design-system primitives. `Button` / `Segmented` / `PhotoTile` / `ErrorPanel` / `icons` (SVGs ported from the design).
 - **`src/features/`** — Units that encapsulate UI + hooks per feature. timeline / calendar / lightbox / library (settings) / highlights / import / onboarding / tokens / shell.
-- **`src/lib/`** — Cross-cutting utilities. `cn.ts` (class merging) / `format.ts` (`formatCount` / `formatBytes` / `formatTakenAt`, etc.).
+- **`src/lib/`** — Cross-cutting utilities. `cn.ts` (class merging) / `format.ts` (`formatCount` / `formatBytes`, etc.) / `datetime.ts` (locale-aware `Intl` day/time formatting).
+- **`src/locales/`** — `en.json` / `ja.json` (i18next resources). Strings stay in the UI layer and never cross the port.
 - **`src/index.css`** — The single source of truth for design tokens (`:root` / `.dark` / `[data-accent]` / heat variables). Tailwind references this.
 
 ## The seam: the PhotoLibrary port and adapters
@@ -69,28 +79,33 @@ The only face between UI and backend is `PhotoLibrary` in `src/domain/ports.ts`.
 
 ```ts
 export interface PhotoLibrary {
-  listTimeline(): Promise<DayEntry[]>      // chronological descending, today first
-  getMonth(): Promise<MonthCell[]>         // calendar month grid
-  getHeatmap(): Promise<HeatWeek[]>        // yearly heatmap
-  getHighlights(): Promise<HighlightsData> // ★ highlights
-  getStats(): Promise<LibraryStats>        // library stats
-  listFolders(): Promise<WatchedFolder[]>  // watched-folder list
-  listPlaceFacets(): Promise<PlaceFacet[]> // place facets for search
-  saveNote(date: string, note: string): Promise<void> // save a day's note
+  listTimeline(): Promise<DayEntry[]>              // reverse chronological, today first
+  getMonth(year: number, month: number): Promise<MonthCell[]>  // calendar grid (1-based month)
+  getHeatmap(year: number): Promise<HeatWeek[]>    // yearly heatmap for a year
+  getHighlights(): Promise<HighlightsData>         // ★ highlights
+  getStats(): Promise<LibraryStats>                // library stats
+  listFolders(): Promise<WatchedFolder[]>          // watched-folder list
+  listPlaceFacets(): Promise<PlaceFacet[]>         // place facets for search
+  // mutations
+  importFolder(path: string, onProgress?: (p: ImportProgress) => void): Promise<ImportResult>
+  saveNote(date: string, note: string): Promise<void> // save (or, on empty, delete) a day's note
   toggleStar(photoId: string): Promise<void>          // toggle a photo's ★
 }
 ```
 
-- **Phase 1 adapter**: `src/data/mock/MockPhotoLibrary.ts` (`implements PhotoLibrary`). It returns the fixed data from `fixtures.ts`, and `getMonth` / `getHeatmap` call `buildMonthCells` / `buildHeatWeeks` from `src/domain`. `saveNote` / `toggleStar` mutate in-memory objects directly.
-- **Phase 2 adapter**: `TauriPhotoLibrary` (calls the Rust core via `@tauri-apps/api`'s `invoke`; not started). The only swap point is a single line in `src/app/providers.tsx`, and the UI is unchanged.
+`getMonth` / `getHeatmap` take an explicit year/month so the calendar and heatmap are no longer pinned to a fixed month — the query keys carry the parameters (`qk.month(year, month)`, `qk.heatmap(year)`).
+
+- **Mock adapter**: `src/data/mock/MockPhotoLibrary.ts` (`implements PhotoLibrary`). It feeds `fixtures.ts` records through the same `domain/build` functions the real backend uses; `saveNote` / `toggleStar` upsert in-memory and return fresh objects so queries re-render.
+- **Real adapter**: `src/data/tauri/TauriPhotoLibrary.ts`. Each method `invoke`s a Rust command, maps the DTOs, and runs the `domain/build` functions. `importFolder` streams per-file progress via a Tauri `Channel`; thumbnails and full-res masters resolve through `convertFileSrc`.
 
 ```tsx
-// src/app/providers.tsx — the swap happens here, in one place
-const [library] = useState(() => new MockPhotoLibrary())
-// Phase 2: just change it to new TauriPhotoLibrary()
+// src/app/providers.tsx — the backend is chosen at runtime, not hand-swapped
+const [library] = useState<PhotoLibrary>(() =>
+  isTauri ? new TauriPhotoLibrary() : new MockPhotoLibrary(),
+)
 ```
 
-The concrete instance is injected into `LibraryProvider`, and from then on it's only obtained via `useLibrary()`. Because of this dependency inversion, swapping the backend implementation doesn't ripple into the UI.
+The concrete instance is injected into `LibraryProvider`, and from then on it's only obtained via `useLibrary()`. Because of this dependency inversion, which backend is running doesn't ripple into the UI.
 
 ## Data flow (TanStack Query)
 
@@ -98,16 +113,16 @@ Every read calls `PhotoLibrary` through a hook in `src/app/queries.ts`. The hook
 
 ```
 features component
-  └─ useTimeline() / useCalendarMonth() / useHeatmap() / useHighlights()
+  └─ useTimeline() / useCalendarMonth(year, month) / useHeatmap(year) / useHighlights()
      useStats() / useFolders() / usePlaceFacets()
         └─ useQuery({ queryKey: qk.*, queryFn: () => library.<method>() })
-              └─ useLibrary() → PhotoLibrary → MockPhotoLibrary
+              └─ useLibrary() → PhotoLibrary → Mock- or TauriPhotoLibrary
 ```
 
-- Query keys are consolidated in `qk` (`timeline` / `month` / `heatmap` / `highlights` / `stats` / `folders` / `placeFacets`).
-- The `QueryClient` defaults to `staleTime: Infinity` and `refetchOnWindowFocus: false` (`src/app/providers.tsx`). Since the data is local, this avoids unnecessary refetches.
-- **Mutations** are `useSaveNote` / `useToggleStar`. On success they invalidate the related queries (`saveNote` → `qk.timeline`, `toggleStar` → `qk.timeline` + `qk.highlights`).
-- **Client UI state** (lightbox open/closed and current index, import overlay state) isn't server state, so it's held by Zustand's `useUi` (`src/app/ui-store.ts`) rather than TanStack Query. Theme (`mode` / `accent` / `showEmptyDays`) is likewise held by Zustand's `useTheme` (`src/app/theme.ts`).
+- Query keys are consolidated in `qk` (`timeline` / `month` / `heatmap` / `highlights` / `stats` / `folders` / `placeFacets`). Parameterized keys append their args: `[...qk.month, year, month, today]`, `[...qk.heatmap, year, today]`.
+- The `QueryClient` defaults to `staleTime: Infinity` and `refetchOnWindowFocus: false` (`src/app/providers.tsx`). Since the data is local, this avoids unnecessary refetches — so the current date is carried in the key via `useToday()` (`src/app/today.ts`), which rolls "today" over at midnight instead of leaving a diary opened overnight stuck on yesterday.
+- **Mutations** (`src/app/queries.ts`): `useImportFolder` (invalidates everything — an import touches all reads), `useSaveNote` (→ `timeline` + `month` + `stats`), `useToggleStar` (optimistic in-place flip across `timeline` + `highlights` with rollback on error, then settles by invalidating `timeline` + `highlights` + `stats`).
+- **Client UI state** (lightbox open/closed and current index, import overlay, toasts) isn't server state, so it's held by Zustand's `useUi` (`src/app/ui-store.ts`) rather than TanStack Query. Theme (`mode` / `accent` / `showEmptyDays`) is likewise held by Zustand's `useTheme` (`src/app/theme.ts`).
 
 ## DayEntry — the discriminated union for a single day
 
@@ -125,13 +140,23 @@ export type DayEntry =
       clusters: TimeCluster[]
       note: string | null
     })
+  | (DayCommon & {
+      kind: 'event'
+      title: string
+      start: string  // inclusive 'YYYY-MM-DD' span
+      end: string
+      photoCount: number
+      days: EventDay[]
+      note: string | null
+    })
 
 export type DayKind = DayEntry['kind']
 ```
 
 - The shared `DayCommon` holds `date` (`'YYYY-MM-DD'`) / `place` / `today`. Presentation (weekday, month-day, "N photos") is deliberately kept out of the domain — dates stay raw and the UI formats them per locale via `Intl` (`src/lib/datetime.ts`), so locale never crosses the `PhotoLibrary` port.
-- `photos` = a normal day with photos, `note_only` = a note only with no photos, `empty` = no record, `digest` = the "digest" for a heavy-shooting day. `digest` holds a `TimeCluster[]` — auto-clustered by EXIF capture intervals — in `clusters`.
-- Branching on `kind` lets each card handle only the fields it needs, type-safely. It's guaranteed by the type that `empty` has neither a note nor photos.
+- `photos` = a normal day with photos, `note_only` = a note only with no photos, `empty` = no record, `digest` = the "digest" for a heavy-shooting day (holds EXIF-clustered `TimeCluster[]`), `event` = a multi-night trip spanning several days. **Five variants.**
+- `event` currently renders only from mock fixtures (`EventCard`); the Rust-fed `buildTimeline` does not yet emit `kind: 'event'` (2c has no backend grouping). The variant and card exist so the switch stays exhaustive.
+- Branching on `kind` lets each card handle only the fields it needs, type-safely (`strict` + `noFallthroughCasesInSwitch` catch a missed variant). It's guaranteed by the type that `empty` has neither a note nor photos.
 
 ## The single source of truth for design tokens
 
@@ -144,38 +169,55 @@ The truth for colors and themes is consolidated in one place: the CSS variables 
 
 ## The Phase 1 / Phase 2 boundary
 
-- **Phase 1 (the current state of this repository = implemented)**: A Vite + React + TypeScript + Tailwind frontend. Data is mocked (`MockPhotoLibrary` + `fixtures.ts`). The calendar is fixed to July 2026, and the yearly heatmap is generated deterministically for 2026 (today = July 5).
-- **Phase 2 (not started)**: A Tauri v2 shell + Rust core. EXIF reading via kamadak-exif, AVIF conversion via ravif / image, folder scanning via walkdir, and SQLite for the DB are envisioned. `TauriPhotoLibrary` implements `PhotoLibrary` and replaces `MockPhotoLibrary` (the UI is unchanged). Day detail (virtual scrolling, 2b) and multi-night events (2c) are also within Phase 2's scope.
+- **Phase 1 — implemented**: A Vite + React + TypeScript + Tailwind frontend. In browser dev the data is mocked (`MockPhotoLibrary` + `fixtures.ts`, keyed around a July 2026 fixture set).
+- **Phase 2 — implemented**: A Tauri v2 shell + a Rust core (`crates/photo-diary-core`): EXIF via kamadak-exif, orientation correction, full-res visually-lossless AVIF via `image`'s AvifEncoder, folder scan via walkdir, SQLite (rusqlite) with `user_version` migrations, SHA-256 dedup, an async import pipeline with per-file error reporting, and a read-query layer returning raw DTOs. `TauriPhotoLibrary` (`src/data/tauri/`) implements the same `PhotoLibrary`; `providers.tsx` selects it at runtime inside the Tauri window. The UI is unchanged.
+  - The Rust side returns **raw records** (`PhotoDto`, `MonthRecordDto`, `DayCountDto`, notes, …); day grouping, digest clustering, the calendar grid, the heatmap and highlights are assembled in TS (`src/domain/build/*`), shared with the mock.
+  - Day detail (virtual scrolling, 2b) and multi-night events (2c) are within Phase 2's scope but only partly built: `DayDetailView` is a static mock kept unrouted, and `event` cards render only from fixtures (no backend event grouping yet).
 
-Because the boundary is closed within a single interface (`PhotoLibrary`), Phase 2 work concentrates on adding an adapter and swapping `providers.tsx`, while `src/features` and `src/domain` can be used as-is.
+Because the boundary is closed within a single interface (`PhotoLibrary`), both backends plug in behind the same port and `src/features` / most of `src/domain` are used as-is.
 
 ## Directory map
 
 ```
 src/
 ├─ domain/                 pure models & logic (React-free)
-│  ├─ models.ts            Photo / DayEntry(discriminated union) / TimeCluster / WatchedFolder
-│  │                       LibraryStats / HighlightsData / PlaceFacet / AspectRatio
+│  ├─ models.ts            Photo / DayEntry(5-variant union) / TimeCluster / EventDay
+│  │                       WatchedFolder / LibraryStats / HighlightsData / PlaceFacet
+│  │                       ImportResult / ImportProgress / AspectRatio
 │  ├─ ports.ts             PhotoLibrary interface (the backend seam)
-│  ├─ heatmap.ts           levelFor / buildHeatWeeks (deterministic, seeded)
-│  ├─ calendar.ts          buildMonthCells → MonthCell[]
+│  ├─ calendar.ts          MonthCell type (builder lives in build/)
+│  ├─ heatmap.ts           HeatWeek / HeatCell types (builder lives in build/)
+│  ├─ build/               pure builders shared by both backends
+│  │  ├─ timeline.ts       buildTimeline (grouping / digest / empty-gap)
+│  │  ├─ calendar.ts       buildMonthCells → MonthCell[]
+│  │  ├─ heatmap.ts        buildHeatWeeks → HeatWeek[]
+│  │  └─ highlights.ts     groupHighlights → HighlightsData
+│  ├─ heat-level.ts        count → level bucket (calendar dots + heatmap)
+│  ├─ star.ts              starred-set flip helpers (optimistic updates)
 │  └─ tokens.ts            tokenRows / tokenColor (reference table matching index.css)
 ├─ data/
-│  └─ mock/                concrete PhotoLibrary (Phase 1)
-│     ├─ MockPhotoLibrary.ts  implements PhotoLibrary (in-memory)
-│     └─ fixtures.ts          timeline / highlights / stats / folders / placeFacets / julyRecords
+│  ├─ mock/                PhotoLibrary for browser dev
+│  │  ├─ MockPhotoLibrary.ts  implements PhotoLibrary (in-memory, via build/)
+│  │  └─ fixtures.ts          timeline / highlights / stats / folders / placeFacets / julyRecords
+│  └─ tauri/               the real backend (Phase 2)
+│     ├─ TauriPhotoLibrary.ts implements PhotoLibrary over invoke (+ build/)
+│     └─ commands.ts          typed invoke wrappers + DTO types (camelCase)
 ├─ app/                    app assembly
-│  ├─ providers.tsx        QueryClientProvider + LibraryProvider (concrete created here)
+│  ├─ providers.tsx        QueryClientProvider + LibraryProvider (isTauri picks backend)
+│  ├─ env.ts               isTauri
 │  ├─ library-context.tsx  LibraryProvider / useLibrary()
-│  ├─ queries.ts           TanStack Query hooks + qk
+│  ├─ queries.ts           TanStack Query hooks + mutations + qk
+│  ├─ today.ts             useToday (rolls "today" over at midnight)
 │  ├─ router.tsx           react-router route definitions
 │  ├─ theme.ts             theme Zustand (reflects .dark / data-accent)
-│  ├─ ui-store.ts          lightbox / import UI state Zustand
+│  ├─ ui-store.ts          lightbox / import / toast UI state Zustand
+│  ├─ i18n.ts              i18next init (en/ja)
 │  └─ App.tsx              Providers → RouterProvider
-├─ ui/                     Button / Segmented / PhotoTile / icons
+├─ ui/                     Button / Segmented / PhotoTile / ErrorPanel / icons
 ├─ features/               UI + hooks encapsulated per feature
-│  ├─ shell/               AppShell / SearchBar / Sidebar / TopBar
-│  ├─ timeline/            TimelineView / DayCard / DayHeader / DigestCard / NoteEditor
+│  ├─ shell/               AppShell / SearchBar / Sidebar / TopBar / Toast
+│  ├─ timeline/            TimelineView / DayCard / DayHeader / DigestCard / EventCard
+│  │                       NoteEditor / DayDetailView (2b, unrouted mock)
 │  ├─ calendar/            CalendarView / MonthGrid / YearHeatmap / heat.ts
 │  ├─ highlights/          HighlightsView
 │  ├─ lightbox/            Lightbox
@@ -183,23 +225,30 @@ src/
 │  ├─ import/              ImportOverlay
 │  ├─ onboarding/          EmptyState (/welcome, when no folder is registered)
 │  └─ tokens/              TokensView (token list)
-├─ lib/                    cn.ts / format.ts
+├─ lib/                    cn.ts / format.ts / datetime.ts
+├─ locales/                en.json / ja.json (i18next)
+├─ test/                   vitest setup / polyfills / port-contract suite / utils
 └─ index.css               the single source of truth for design tokens
+
+crates/photo-diary-core/   Rust core: scan / exif / orient / transcode / thumbnail
+                           db (SQLite + migrations) / views (read queries) / dto / library
+src-tauri/                 Tauri v2 shell: IPC commands → photo-diary-core, tauri.conf.json (CSP)
+e2e/                       Playwright smoke spec + global-setup
 ```
 
 ## Routing
 
-`src/app/router.tsx` (react-router) has `AppShell` as the parent, with `/` (TimelineView) / `/calendar` / `/highlights` / `/settings` / `/tokens` as child routes. The onboarding `/welcome` (EmptyState), shown when no folder is registered, sits on its own outside the shell.
+`src/app/router.tsx` (react-router) has `AppShell` as the parent, with `/` (TimelineView) / `/calendar` / `/highlights` / `/settings` / `/tokens` as child routes. The onboarding `/welcome` (EmptyState), shown when no folder is registered, sits on its own outside the shell. The 2b day-detail screen (`DayDetailView`) is intentionally **not** routed — it's still a static mock and stays unreachable until it's wired from real data as `/day/:date`.
 
 ## Build and quality gates
 
 For reproducibility, local and CI pass through the same recipe (`just check`). The package manager is pnpm (npm is not used), and the toolchain is pinned by `mise.toml`.
 
 - **Setup**: after `just setup`, run `just dev` (http://localhost:5173).
-- **justfile recipes**: `setup` / `doctor` / `dev` / `typecheck` / `lint` / `fmt` / `typos` / `check` (= typecheck + lint + typos) / `build` / `clean`.
-- **pnpm scripts**: `dev` / `build` / `preview` / `typecheck`.
-- **Toolchain (`mise.toml`)**: node = lts, pnpm 10, biome 2.5.0, just 1, lefthook 2, crate-ci/typos, committed, taplo-cli. cargo goes via binstall.
-- **Git gates (lefthook)**: commit-msg = committed (Conventional Commits) / pre-commit = biome (staged) + typos + `taplo fmt --check` / pre-push = `just check`.
-- **CI (`.github/workflows/ci.yml`)**: jdx/mise-action → `pnpm install --frozen-lockfile` → `just check` → `just build`. Since pre-push and CI run the same `just check`, local == CI is preserved.
+- **justfile recipes**: `setup` / `doctor` / `dev` / `typecheck` / `lint` / `fmt` / `typos` / `test` / `coverage` / `check` (= typecheck + lint + typos + coverage) / `e2e` / `verify` (= check + build + e2e) / `build` / `clean`. Desktop (Phase 2): `app-dev` / `app-build` / `app-test` / `app-lint` / `check-rust` (= app-test + app-lint).
+- **pnpm scripts**: `dev` / `build` / `preview` / `typecheck` / `test` / `coverage` / `e2e` / `tauri`.
+- **Toolchain (`mise.toml`, all exact-pinned)**: node 24.18.0, pnpm 10.34.4, biome 2.5.0, rust 1.96.0, just 1.54.0, lefthook 2.1.9, crate-ci/typos 1.47.2, committed 1.1.11, taplo-cli 0.10.0. cargo-backend tools are binstalled. Rust for the Phase 2 core/shell is provisioned by mise too (`rust = "1.96.0"`), so local == CI on the Rust side as well.
+- **Git gates (lefthook)**: commit-msg = committed (Conventional Commits) / pre-commit = biome (staged) + typos + `taplo fmt --check` / pre-push = `just check`, plus `just check-rust` when the push includes Rust files (`*.rs` / `Cargo.*`).
+- **CI (`.github/workflows/ci.yml`)** — three jobs: `check` (jdx/mise-action → `pnpm install --frozen-lockfile` → `just check` → `just build`, pnpm-store cached), `e2e` (installs the Playwright browser, runs `just e2e`), and `rust` (Linux + Windows matrix; installs Tauri's Linux system deps, caches cargo, runs `just check-rust`). Since pre-push and CI run the same recipes, local == CI is preserved.
 
 The design source (the Claude Design handoff `_handoff/`) and the internal memo `CLAUDE.md` are gitignored and reference-only.
