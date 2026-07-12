@@ -3,6 +3,14 @@
 # it out makes mutation runs light and reproducible on Linux CI.
 examine_globs = ["crates/photo-diary-core/src/**/*.rs"]
 
+# Run the test harness single-threaded. `cargo test --workspace` is green in
+# parallel, but under cargo-mutants' isolated target dir the db migration tests
+# (e.g. db::tests::migrations_are_idempotent) are not parallel-hermetic and the
+# unmutated baseline flakes. --test-threads=1 makes the baseline (and every
+# mutant run) deterministic without touching the existing tests. If those tests
+# are made hermetic later, this can be dropped.
+additional_cargo_test_args = ["--", "--test-threads=1"]
+
 # Untested / logic-free modules: mutating them yields guaranteed survivors that
 # would fail the pass/fail gate for no signal. Revisit once they grow tests.
 exclude_globs = [

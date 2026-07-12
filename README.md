@@ -102,7 +102,7 @@ All gates are defined in one place and shared between local and CI.
   - `commit-msg`: Conventional Commits check via committed.
   - `pre-commit`: Biome + typos + `taplo fmt --check` on staged files.
   - `pre-push`: `just check` (the full gate), plus `just check-rust` when the push touches Rust files (`*.rs` / `Cargo.*`).
-- **CI (`.github/workflows/ci.yml`)**: four jobs. `check` — `jdx/mise-action` → `pnpm install --frozen-lockfile` → `just check` → `just build` (the exact same gate as pre-push, with pnpm-store caching). `e2e` — installs the Playwright browser and runs `just e2e`. `rust` — a Linux + Windows matrix that installs Tauri's Linux system deps, caches cargo, and runs `just check-rust`. `mutation` (PR-only) — mutation-tests just the code the PR changed (StrykerJS on TS `domain`/`lib`, cargo-mutants on the Rust core); currently report-only while a baseline is measured.
+- **CI (`.github/workflows/ci.yml`)**: four jobs. `check` — `jdx/mise-action` → `pnpm install --frozen-lockfile` → `just check` → `just build` (the exact same gate as pre-push, with pnpm-store caching). `e2e` — installs the Playwright browser and runs `just e2e`. `rust` — a Linux + Windows matrix that installs Tauri's Linux system deps, caches cargo, and runs `just check-rust`. `mutation` (PR-only) — mutation-tests just the code the PR changed: StrykerJS on TS `domain`/`lib` (enforced, `break: 70` vs an 87% baseline) and cargo-mutants on the Rust core (report-only for now; runs single-threaded to keep the migration tests hermetic).
 
 Don't bypass the hooks with `--no-verify`. CI runs the same gate, so it will fail there anyway.
 

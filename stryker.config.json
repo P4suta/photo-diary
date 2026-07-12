@@ -11,7 +11,7 @@
     "!src/domain/ports.ts",
     "!src/domain/models.ts"
   ],
-  "thresholds": { "high": 90, "low": 80, "break": null },
+  "thresholds": { "high": 90, "low": 80, "break": 70 },
   "incremental": true,
   "incrementalFile": "reports/stryker-incremental.json",
   "htmlReporter": { "fileName": "reports/mutation/index.html" }
