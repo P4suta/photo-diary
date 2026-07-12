@@ -89,6 +89,8 @@ Everything is a `justfile` recipe (running `just` with no arguments prints the l
 | `just app-dev` / `just app-build` | Run / package the Tauri desktop app (Phase 2) |
 | `just app-test` / `just app-lint` | `cargo test --workspace` / clippy + `cargo fmt --check` |
 | `just check-rust` | The full Rust-side gate (`app-test` + `app-lint`) |
+| `just mutation` / `just mutation-rust` | Mutation baseline (StrykerJS on TS `domain`/`lib`, cargo-mutants on the Rust core); heavy, manual |
+| `just mutation-diff` / `just mutation-rust-diff` | The same, scoped to changes vs a base ref — the PR-diff mutation gate |
 
 Corresponding pnpm scripts: `dev`, `build`, `preview`, `typecheck`, `test`, `coverage`, `e2e`, `tauri`.
 
@@ -100,7 +102,7 @@ All gates are defined in one place and shared between local and CI.
   - `commit-msg`: Conventional Commits check via committed.
   - `pre-commit`: Biome + typos + `taplo fmt --check` on staged files.
   - `pre-push`: `just check` (the full gate), plus `just check-rust` when the push touches Rust files (`*.rs` / `Cargo.*`).
-- **CI (`.github/workflows/ci.yml`)**: three jobs. `check` — `jdx/mise-action` → `pnpm install --frozen-lockfile` → `just check` → `just build` (the exact same gate as pre-push, with pnpm-store caching). `e2e` — installs the Playwright browser and runs `just e2e`. `rust` — a Linux + Windows matrix that installs Tauri's Linux system deps, caches cargo, and runs `just check-rust`.
+- **CI (`.github/workflows/ci.yml`)**: four jobs. `check` — `jdx/mise-action` → `pnpm install --frozen-lockfile` → `just check` → `just build` (the exact same gate as pre-push, with pnpm-store caching). `e2e` — installs the Playwright browser and runs `just e2e`. `rust` — a Linux + Windows matrix that installs Tauri's Linux system deps, caches cargo, and runs `just check-rust`. `mutation` (PR-only) — mutation-tests just the code the PR changed (StrykerJS on TS `domain`/`lib`, cargo-mutants on the Rust core); currently report-only while a baseline is measured.
 
 Don't bypass the hooks with `--no-verify`. CI runs the same gate, so it will fail there anyway.
 

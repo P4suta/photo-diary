@@ -29,6 +29,10 @@ lefthook = "2.1.9"
 # TOML formatter (`taplo fmt`) for mise.toml today and the Tauri Cargo.toml in
 # phase 2. cargo backend, binstalled. Exact-pinned.
 "cargo:taplo-cli" = "0.10.0"
+# Mutation testing for the Rust core (`just mutation-rust*`). Complements the
+# StrykerJS side on the TS pure-logic layers. cargo backend, binstalled
+# (prebuilt binary from the GitHub release). Exact-pinned.
+"cargo:cargo-mutants" = "27.1.0"
 
 [settings]
 # Fetch cargo: backend tools as prebuilt binaries (cargo-binstall) instead of

@@ -136,3 +136,35 @@ app-lint:
 # Full Rust-side gate (same as CI).
 [group('desktop')]
 check-rust: app-test app-lint
+
+# ── Mutation testing (heavy; PR-diff gate, NOT part of check / pre-push) ───────
+
+# Mutation testing complements coverage: it injects faults and checks the tests
+# actually catch them. Heavy like e2e, so it stays out of `check` / pre-push and
+# runs as its own PR-diff CI job. Baseline runs are manual (`mutation` /
+# `mutation-rust`); the CI gate uses the diff-only recipes below.
+
+# Full-repo TS mutation (StrykerJS over domain/lib). Baseline / manual — writes an
+# HTML report to reports/mutation/.
+[group('mutation')]
+mutation:
+    pnpm exec stryker run
+
+# Full-repo Rust mutation (cargo-mutants over the core crate). Baseline / manual.
+# First run is build-time-dominated (every mutant rebuilds + tests).
+[group('mutation')]
+mutation-rust:
+    cargo mutants --package photo-diary-core
+
+# Diff-only TS mutation: mutate only the domain/lib files changed vs the base ref.
+# Stryker has no --since, so a node driver enumerates them (portable sh/PowerShell,
+# like `clean`). This is the CI PR gate; `base` defaults to origin/main locally.
+[group('mutation')]
+mutation-diff base='origin/main':
+    pnpm exec node scripts/mutation-ts-diff.mjs {{base}}
+
+# Diff-only Rust mutation: cargo-mutants --in-diff against the base ref (only
+# changed lines). The CI PR gate; `base` defaults to origin/main locally.
+[group('mutation')]
+mutation-rust-diff base='origin/main':
+    pnpm exec node scripts/mutation-rust-diff.mjs {{base}}

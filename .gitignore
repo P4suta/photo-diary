@@ -15,6 +15,14 @@ test-results/
 blob-report/
 .playwright/
 
+# Mutation testing (Stryker temp/reports/incremental cache, cargo-mutants output
+# + the diff-driver's generated patch)
+.stryker-tmp/
+reports/
+mutants.out/
+mutants.out.old/
+mutants-in-diff.patch
+
 # Rust / Cargo (photo-diary-core crate, and the Tauri shell in phase 2)
 target/
 # Tauri generated bundle output

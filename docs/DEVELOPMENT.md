@@ -64,6 +64,8 @@ Even if it compiles, breaking these is a regression. Dependencies point **inward
 | `just app-dev` / `app-build` | `pnpm tauri dev` / `build` | run / package the desktop app (Phase 2) |
 | `just app-test` / `app-lint` | `cargo test --workspace` / clippy + `fmt --check` | Rust core + shell |
 | `just check-rust` | `app-test` + `app-lint` | the full Rust-side gate |
+| `just mutation` / `mutation-rust` | StrykerJS (TS domain/lib) / cargo-mutants (Rust core), whole repo | mutation baseline (manual, heavy) |
+| `just mutation-diff` / `mutation-rust-diff` | the same, but only what changed vs a base ref | the PR-diff mutation gate |
 
 The pnpm scripts (`package.json`) are `dev` / `build` / `preview` / `typecheck` / `test` / `coverage` / `e2e` / `tauri`. The justfile wraps these. Day to day, use `just` rather than raw pnpm. First E2E run locally needs the browser once: `pnpm exec playwright install chromium`.
 
@@ -77,9 +79,18 @@ The gates share one definition between local and CI (local == CI). The hooks are
   - `typos` — spell-check the whole working tree (config `_typos.toml`).
   - `taplo fmt --check` — check that staged `*.toml` are formatted (config `taplo.toml`).
 - **pre-push** — `just check` (= typecheck + Biome + typos + coverage). Plus `rust-gate`: `just check-rust`, glob-filtered so it only runs when the push touches `*.rs` / `Cargo.*` (a JS-only push skips it). The full gate before code leaves the machine.
-- **CI** (`.github/workflows/ci.yml`, `push: [main]` and all PRs) — three jobs. **check**: `jdx/mise-action` → `pnpm install --frozen-lockfile` → `just check` → `just build` (pnpm store cached). **e2e**: installs the Playwright browser (`playwright install --with-deps chromium`) and runs `just e2e`. **rust**: an Ubuntu + Windows matrix that installs Tauri's Linux system libs (WebKitGTK etc.) on Linux, caches cargo, and runs `just check-rust`. Each mirrors a local recipe, so green locally → green in CI.
+- **CI** (`.github/workflows/ci.yml`, `push: [main]` and all PRs) — four jobs. **check**: `jdx/mise-action` → `pnpm install --frozen-lockfile` → `just check` → `just build` (pnpm store cached). **e2e**: installs the Playwright browser (`playwright install --with-deps chromium`) and runs `just e2e`. **rust**: an Ubuntu + Windows matrix that installs Tauri's Linux system libs (WebKitGTK etc.) on Linux, caches cargo, and runs `just check-rust`. **mutation** (PR-only): diffs the PR against its base and runs `just mutation-diff` / `just mutation-rust-diff` on just the changed code. Each mirrors a local recipe, so green locally → green in CI.
 
 **Don't bypass the hooks with `--no-verify`.** CI runs the same gate, so it fails there anyway.
+
+### Mutation testing (the fourth gate)
+
+Coverage proves a line *ran*; mutation testing proves a test would *fail* if that line were wrong. StrykerJS mutates the TS pure-logic layers (`src/domain` / `src/lib`, via `vitest.stryker.config.ts` + `stryker.config.json`), and cargo-mutants mutates the Rust core crate (`.cargo/mutants.toml`) — the same pure layers that carry the 90% coverage thresholds.
+
+- **PR-diff scope.** The CI `mutation` job only mutates what the PR touched (Stryker via a node driver that lists changed `domain`/`lib` files for `--mutate`; cargo-mutants via `--in-diff`). It enforces the *new* change without demanding you first clear the whole existing backlog — the same "enforce on the diff" spirit as the coverage gate.
+- **The two sides gate differently.** Stryker uses a percentage `break` threshold (`thresholds.break`); cargo-mutants has **no percentage** — a single surviving mutant exits non-zero. Mind the asymmetry when reading failures.
+- **A whole-file caveat (TS).** Stryker has no line-level diff filter, so `--mutate <changed file>` re-mutates the *entire* file — a one-line edit to a big well-tested file can surface a pre-existing survivor. `incremental` (cached in CI) reuses unchanged mutants to soften this; cargo-mutants is line-scoped and doesn't have the issue.
+- **Rollout.** The job is currently **report-only** (`continue-on-error: true`, and `break: null` in `stryker.config.json`). Measure a baseline with `just mutation` / `just mutation-rust`, set `break` a few points under the real score, then drop `continue-on-error` to enforce.
 
 ## Editor
 

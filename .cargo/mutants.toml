@@ -1,0 +1,12 @@
+# cargo-mutants config. Only mutate the pure-logic core crate; never the Tauri
+# shell (src-tauri), whose build pulls in GTK/WebKit and is OS-dependent. Keeping
+# it out makes mutation runs light and reproducible on Linux CI.
+examine_globs = ["crates/photo-diary-core/src/**/*.rs"]
+
+# Untested / logic-free modules: mutating them yields guaranteed survivors that
+# would fail the pass/fail gate for no signal. Revisit once they grow tests.
+exclude_globs = [
+  "crates/photo-diary-core/src/lib.rs",
+  "crates/photo-diary-core/src/model.rs",
+  "crates/photo-diary-core/src/error.rs",
+]

@@ -125,3 +125,69 @@ jobs:
       # of truth), so local == CI: workspace test + clippy (-D warnings) + fmt check.
       - name: Rust gate (test + clippy + fmt)
         run: just check-rust
+
+  # Differential mutation testing — a PR-only quality gate on the pure-logic layers
+  # (TS domain/lib via StrykerJS, Rust core via cargo-mutants). It only mutates what
+  # the PR changed vs its base, so it enforces "don't add a test that can't catch a
+  # bug" without first clearing the whole existing backlog. Heavy, so it's its own
+  # job like e2e — never part of `check` / pre-push. Single Ubuntu runner: mutation
+  # results on pure logic are OS-independent (Windows shipping is covered by `rust`).
+  #
+  # Rollout: currently report-only (continue-on-error + `break: null` in
+  # stryker.config.json). Once a baseline is measured and `break` is set, drop
+  # continue-on-error to make it enforce.
+  mutation:
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    continue-on-error: true
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          # Full history so we can diff the PR head against its base ref.
+          fetch-depth: 0
+
+      # mise provisions cargo-mutants (cargo backend, binstalled) plus node/pnpm/just.
+      - name: Install toolchain (mise)
+        uses: jdx/mise-action@v2
+
+      # The PR base isn't necessarily main; fetch exactly the branch this PR targets
+      # so `origin/<base_ref>` resolves for the diff.
+      - name: Fetch PR base
+        run: git fetch --no-tags origin ${{ github.base_ref }}
+
+      - name: Locate pnpm store
+        id: pnpm-store
+        shell: bash
+        run: echo "path=$(pnpm store path --silent)" >> "$GITHUB_OUTPUT"
+      - name: Cache pnpm store
+        uses: actions/cache@v4
+        with:
+          path: ${{ steps.pnpm-store.outputs.path }}
+          key: ${{ runner.os }}-pnpm-store-${{ hashFiles('pnpm-lock.yaml') }}
+          restore-keys: |
+            ${{ runner.os }}-pnpm-store-
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      # Persist Stryker's incremental results across runs so unchanged mutants are
+      # reused — Stryker mutates whole files, so this keeps large-file edits cheap.
+      - name: Cache Stryker incremental
+        uses: actions/cache@v4
+        with:
+          path: reports/stryker-incremental.json
+          key: stryker-incremental-${{ github.sha }}
+          restore-keys: |
+            stryker-incremental-
+
+      # cargo-mutants builds the core crate per mutant; cache the registry + target.
+      - name: Rust cache
+        uses: Swatinem/rust-cache@v2
+
+      # Diff-only gates. No Tauri GTK/WebKit apt step needed: --in-diff runs against
+      # -p photo-diary-core only, so src-tauri never builds.
+      - name: TS mutation (diff)
+        run: just mutation-diff origin/${{ github.base_ref }}
+
+      - name: Rust mutation (diff)
+        run: just mutation-rust-diff origin/${{ github.base_ref }}
