@@ -18,11 +18,9 @@ const base = process.argv[2] ?? 'origin/main'
 
 let changed
 try {
-  changed = execFileSync(
-    'git',
-    ['diff', '--name-only', '--diff-filter=d', `${base}...HEAD`],
-    { encoding: 'utf8' },
-  )
+  changed = execFileSync('git', ['diff', '--name-only', '--diff-filter=d', `${base}...HEAD`], {
+    encoding: 'utf8',
+  })
 } catch (err) {
   console.error(`git diff against '${base}' failed: ${err.message}`)
   process.exit(1)
