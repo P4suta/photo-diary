@@ -3,6 +3,7 @@
   "private": true,
   "version": "0.1.0",
   "type": "module",
+  "license": "MIT OR Apache-2.0",
   "packageManager": "pnpm@10.34.4",
   "engines": {
     "node": ">=22",

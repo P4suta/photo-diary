@@ -3,6 +3,7 @@ name = "photo-diary"
 version = "0.1.0"
 edition = "2021"
 description = "photo-diary desktop shell (Tauri v2). UI from ../dist, real work in photo-diary-core."
+license = "MIT OR Apache-2.0"
 publish = false
 
 [lib]
