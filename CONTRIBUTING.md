@@ -76,7 +76,7 @@ Leave formatting to `just fmt` rather than doing it by hand. Any unformatted spo
 
 ## Local == CI
 
-Reproducibility is the top priority. CI (`ci.yml`) installs the same toolchain as `mise.toml` via `jdx/mise-action`, then runs three jobs mirroring local recipes: **check** (`pnpm install --frozen-lockfile` → `just check` → `just build`), **e2e** (`just e2e` after installing the Playwright browser), and **rust** (an Ubuntu + Windows matrix running `just check-rust`). If those recipes are green on your machine, CI should produce the same result. `--frozen-lockfile` fails loudly rather than silently re-resolving when `pnpm-lock.yaml` is stale, so don't forget to commit the lockfile after adding a dependency.
+Reproducibility is the top priority. CI (`ci.yml`) installs the same toolchain as `mise.toml` via `jdx/mise-action`, then runs four jobs mirroring local recipes: **check** (`pnpm install --frozen-lockfile` → `just check` → `just build`), **e2e** (`just e2e` after installing the Playwright browser), **rust** (an Ubuntu + Windows matrix running `just check-rust`), and **mutation** (PR-only diff mutation testing). If those recipes are green on your machine, CI should produce the same result. `--frozen-lockfile` fails loudly rather than silently re-resolving when `pnpm-lock.yaml` is stale, so don't forget to commit the lockfile after adding a dependency.
 
 ## Scope
 
