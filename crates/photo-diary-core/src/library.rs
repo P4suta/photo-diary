@@ -308,7 +308,14 @@ fn file_hash(path: &Path) -> Result<String> {
         }
         hasher.update(&buf[..n]);
     }
-    Ok(format!("{:x}", hasher.finalize()))
+    // sha2 0.11's digest output no longer implements LowerHex, so hex-encode it by hand.
+    use std::fmt::Write as _;
+    let digest = hasher.finalize();
+    let mut hex = String::with_capacity(digest.len() * 2);
+    for byte in digest {
+        write!(hex, "{byte:02x}").expect("writing to a String is infallible");
+    }
+    Ok(hex)
 }
 
 /// Total file size directly under a directory (thumbnail cache size).
