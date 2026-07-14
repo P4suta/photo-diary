@@ -17,12 +17,12 @@ jobs:
   check:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
       # Provisions the exact toolchain pinned in mise.toml (node, pnpm, biome,
       # just, typos, …) — the same versions developers get locally.
       - name: Install toolchain (mise)
-        uses: jdx/mise-action@v2
+        uses: jdx/mise-action@v4
 
       # Cache the pnpm content-addressed store keyed on the lockfile, so unchanged
       # deps are restored instead of re-downloaded. pnpm comes from mise (above).
@@ -31,7 +31,7 @@ jobs:
         shell: bash
         run: echo "path=$(pnpm store path --silent)" >> "$GITHUB_OUTPUT"
       - name: Cache pnpm store
-        uses: actions/cache@v4
+        uses: actions/cache@v6
         with:
           path: ${{ steps.pnpm-store.outputs.path }}
           key: ${{ runner.os }}-pnpm-store-${{ hashFiles('pnpm-lock.yaml') }}
@@ -56,17 +56,17 @@ jobs:
   e2e:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
       - name: Install toolchain (mise)
-        uses: jdx/mise-action@v2
+        uses: jdx/mise-action@v4
 
       - name: Locate pnpm store
         id: pnpm-store
         shell: bash
         run: echo "path=$(pnpm store path --silent)" >> "$GITHUB_OUTPUT"
       - name: Cache pnpm store
-        uses: actions/cache@v4
+        uses: actions/cache@v6
         with:
           path: ${{ steps.pnpm-store.outputs.path }}
           key: ${{ runner.os }}-pnpm-store-${{ hashFiles('pnpm-lock.yaml') }}
@@ -93,11 +93,11 @@ jobs:
         os: [ubuntu-latest, windows-latest]
     runs-on: ${{ matrix.os }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
       # mise provides the pinned Rust toolchain (rust = "1.96" in mise.toml), plus just.
       - name: Install toolchain (mise)
-        uses: jdx/mise-action@v2
+        uses: jdx/mise-action@v4
 
       # Building the src-tauri crate on Linux needs the Tauri v2 GTK/WebKit system
       # libraries. Windows runners ship WebView2, so no equivalent step there.
@@ -142,14 +142,14 @@ jobs:
     if: github.event_name == 'pull_request'
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         with:
           # Full history so we can diff the PR head against its base ref.
           fetch-depth: 0
 
       # mise provisions cargo-mutants (cargo backend, binstalled) plus node/pnpm/just.
       - name: Install toolchain (mise)
-        uses: jdx/mise-action@v2
+        uses: jdx/mise-action@v4
 
       # The PR base isn't necessarily main; fetch exactly the branch this PR targets
       # so `origin/<base_ref>` resolves for the diff.
@@ -161,7 +161,7 @@ jobs:
         shell: bash
         run: echo "path=$(pnpm store path --silent)" >> "$GITHUB_OUTPUT"
       - name: Cache pnpm store
-        uses: actions/cache@v4
+        uses: actions/cache@v6
         with:
           path: ${{ steps.pnpm-store.outputs.path }}
           key: ${{ runner.os }}-pnpm-store-${{ hashFiles('pnpm-lock.yaml') }}
@@ -174,7 +174,7 @@ jobs:
       # Persist Stryker's incremental results across runs so unchanged mutants are
       # reused — Stryker mutates whole files, so this keeps large-file edits cheap.
       - name: Cache Stryker incremental
-        uses: actions/cache@v4
+        uses: actions/cache@v6
         with:
           path: reports/stryker-incremental.json
           key: stryker-incremental-${{ github.sha }}
