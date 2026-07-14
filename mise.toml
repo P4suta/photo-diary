@@ -13,7 +13,10 @@ pnpm = "10.34.4"
 biome = "2.5.0"
 # Phase 2: the Rust core (photo-diary-core) and Tauri shell (src-tauri). Separate from the
 # global mise rust, we exact-pin the version per-project too, to keep local == CI.
-rust = "1.96.0"
+# Components are pinned explicitly: `check-rust` runs clippy + rustfmt, and mise's
+# default rust profile is minimal (no clippy on a clean CI runner), so declare them
+# here — otherwise local (which had them) and CI diverge.
+rust = { version = "1.96.0", components = "clippy,rustfmt" }
 # Task runner (justfile). `just setup` provisions hooks; CI runs the same recipes,
 # so bundling/gate logic lives in exactly one place. Exact-pinned.
 just = "1.54.0"
