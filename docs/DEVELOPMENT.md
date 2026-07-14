@@ -71,17 +71,17 @@ The pnpm scripts (`package.json`) are `dev` / `build` / `preview` / `typecheck` 
 
 ## Quality gates (hooks / CI)
 
-The gates share one definition between local and CI (local == CI). The hooks are managed by lefthook and installed by the `lefthook install` in `just setup`.
+The gates share one definition between local and CI. The hooks are managed by lefthook and installed by the `lefthook install` in `just setup`.
 
 - **commit-msg** — `committed --commit-file {1}`. Enforces Conventional Commits and tidies the history toward future release automation. `committed` skips `fixup!` / merge commits, so autosquash rebases pass as-is. Config is `committed.toml`.
 - **pre-commit** (parallel) — 3 jobs:
   - `biome check --no-errors-on-unmatched {staged_files}` — staged TS/TSX/JS/JSON only (fast).
   - `typos` — spell-check the whole working tree (config `_typos.toml`).
   - `taplo fmt --check` — check that staged `*.toml` are formatted (config `taplo.toml`).
-- **pre-push** — `just check` (= typecheck + Biome + typos + coverage). Plus `rust-gate`: `just check-rust`, glob-filtered so it only runs when the push touches `*.rs` / `Cargo.*` (a JS-only push skips it). The full gate before code leaves the machine.
-- **CI** (`.github/workflows/ci.yml`, `push: [main]` and all PRs) — four jobs. **check**: `jdx/mise-action` → `pnpm install --frozen-lockfile` → `just check` → `just build` (pnpm store cached). **e2e**: installs the Playwright browser (`playwright install --with-deps chromium`) and runs `just e2e`. **rust**: an Ubuntu + Windows matrix that installs Tauri's Linux system libs (WebKitGTK etc.) on Linux, caches cargo, and runs `just check-rust`. **mutation** (PR-only): diffs the PR against its base and runs `just mutation-diff` / `just mutation-rust-diff` on just the changed code. Each mirrors a local recipe, so green locally → green in CI.
+- **pre-push** — `just check` (= typecheck + Biome + typos + coverage). Plus `rust-gate`: `just check-rust`, glob-filtered so it only runs when the push touches `*.rs` / `Cargo.*` (a JS-only push skips it).
+- **CI** (`.github/workflows/ci.yml`, `push: [main]` and all PRs) — four jobs. **check**: `jdx/mise-action` → `pnpm install --frozen-lockfile` → `just check` → `just build` (pnpm store cached). **e2e**: installs the Playwright browser (`playwright install --with-deps chromium`) and runs `just e2e`. **rust**: an Ubuntu + Windows matrix that installs Tauri's Linux system libs (WebKitGTK etc.) on Linux, caches cargo, and runs `just check-rust`. **mutation** (PR-only): diffs the PR against its base and runs `just mutation-diff` / `just mutation-rust-diff` on just the changed code.
 
-**Don't bypass the hooks with `--no-verify`.** CI runs the same gate, so it fails there anyway.
+Because the hooks and CI run the same recipes, `--no-verify` only defers a failure to CI.
 
 ### Mutation testing (the fourth gate)
 
@@ -134,6 +134,6 @@ Phase 2 **added** a Tauri v2 shell and a Rust core without rewriting `src/ui` / 
 2. **Raw DTOs, not port shapes.** The Rust commands return raw records (`PhotoDto`, `MonthRecordDto`, `DayCountDto`, notes, folders, stats) with `#[serde(rename_all = "camelCase")]`. **The `DayEntry` grouping, calendar grid, heatmap and highlights are assembled in TS** by `src/domain/build/*` — not on the Rust side. Only `Photo` maps ~1:1 from a DTO. The port is the contract; the builders are shared with the mock so both backends agree.
 3. **`TauriPhotoLibrary`** (`src/data/tauri/`): implements `PhotoLibrary` by `invoke`ing commands (`commands.ts` holds the typed wrappers + DTO types), mapping DTOs to `Photo` (thumbnails/masters via `convertFileSrc`), and running the `domain/build` functions.
 4. **Runtime selection.** `providers.tsx` picks `TauriPhotoLibrary` or `MockPhotoLibrary` via `isTauri` — **the UI is unchanged**.
-5. **The gates already cover it.** `mise.toml` pins Rust; the justfile has `app-*` / `check-rust`; the pre-push `rust-gate` and the CI `rust` matrix run `just check-rust`; `taplo` formats the Cargo TOML. Keep new Rust recipes/CI steps here (local == CI).
+5. **Gates.** `mise.toml` pins Rust; the justfile has `app-*` / `check-rust`; the pre-push `rust-gate` and the CI `rust` matrix run `just check-rust`; `taplo` formats the Cargo TOML. Keep new Rust recipes/CI steps here.
 
 2b "day detail (virtual scrolling)" and 2c "multi-night events" remain partial: `DayDetailView` is a static mock kept unrouted, and `event` cards render only from mock fixtures (the Rust-fed `buildTimeline` doesn't emit `kind: 'event'` yet). When wiring them, follow the same style: extend the port, feed raw records through a `domain/build` function, and confine the UI to a feature slice.

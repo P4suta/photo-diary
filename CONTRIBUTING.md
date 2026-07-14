@@ -54,9 +54,9 @@ feat  fix  perf  docs  refactor  test  chore  ci  build  deps  style  revert
 - Before larger changes it's safe to also confirm `just build` (`tsc -b` + `vite build`) passes (same as CI's build step).
 - If you touched tokens in `src/index.css`, visually check both light/dark and accent switching for breakage.
 
-### Don't bypass the hooks
+### Hooks
 
-The git hooks (lefthook) are installed by the `lefthook install` in `just setup`. Don't bypass them with `--no-verify`. CI (`.github/workflows/ci.yml`) runs the same gate, so anything that slips past locally will just fail there. Fixing it on your machine is faster and safer.
+The git hooks (lefthook) are installed by the `lefthook install` in `just setup`. They run the same gate as CI (`.github/workflows/ci.yml`), so `--no-verify` only defers a failure to CI.
 
 The role of each hook:
 
