@@ -22,11 +22,15 @@
   },
   "search": {
     "placeholder": "Search…",
+    "active": "{{from}} – {{to}} · {{count}} places",
     "close": "Close search",
     "periodHeading": "Period",
     "placeHeading": "Place",
     "clear": "Clear",
     "apply": "Apply",
+    "from": "From",
+    "to": "To",
+    "noLocation": "No location data",
     "period": {
       "today": "Today",
       "thisWeek": "This week",
@@ -47,13 +51,37 @@
     "open": "Open photo",
     "note": "Note",
     "star": "Star photo",
-    "unstar": "Unstar photo"
+    "unstar": "Unstar photo",
+    "caption": "Caption",
+    "captionPlaceholder": "Add a one-line caption…"
   },
   "event": {
     "label": "Event",
-    "noteSuffix": " · note"
+    "noteSuffix": " · note",
+    "title": "Event title",
+    "note": "Event note",
+    "notePlaceholder": "A note about the whole event…"
+  },
+  "dayDetail": {
+    "back": "Back to timeline",
+    "open": "Open day detail",
+    "picksOnly": "★ only",
+    "select": "Select",
+    "doneSelecting": "Done",
+    "selected": "{{count, number}} selected",
+    "starSelected": "★ Selected",
+    "unstarSelected": "Remove ★",
+    "toggleSelection": "Toggle photo selection",
+    "loading": "Loading more photos…",
+    "scrubber": "Jump to capture time",
+    "size": {
+      "large": "Large tiles",
+      "medium": "Medium tiles",
+      "small": "Small tiles"
+    }
   },
   "lightbox": {
+    "dialog": "Photo viewer",
     "close": "Close (Esc)",
     "prev": "Previous (←)",
     "next": "Next (→)",
@@ -124,13 +152,17 @@
     "disconnected": "Disconnected",
     "lastScan": "last scan {{time}}",
     "rescan": "Rescan",
-    "remove": "Remove"
+    "remove": "Remove",
+    "removeConfirm": "Stop watching {{path}}? Imported photos will stay in the diary.",
+    "clearConfirm": "Clear the thumbnail cache? Full-resolution masters are not affected.",
+    "regenerateConfirm": "Regenerate every thumbnail now?"
   },
   "onboarding": {
     "title": "A diary that begins from photos",
     "body": "Add a folder and your photos line up by capture date, copied into the diary library. They are optimized to lightweight full-resolution AVIF, so <strong>the originals are never modified, and even if you delete them after import your photos stay here.</strong>",
     "chooseFolder": "Choose a folder…",
-    "formats": "Supported: JPEG · HEIC · PNG · WebP · AVIF",
+    "formats": "Imports: JPEG · PNG · WebP · TIFF · BMP · GIF. HEIC/HEIF/AVIF are detected, skipped, and reported.",
+    "dropFolder": "Or drop a folder here",
     "viewDemo": "→ View the demo timeline"
   },
   "import": {
@@ -139,6 +171,8 @@
     "importingCount": "Importing {{count, number}} photos",
     "body": "Copying into the diary library while optimizing to full-resolution AVIF. Originals are not modified.",
     "continueBackground": "Continue in background",
+    "pause": "Pause after this file",
+    "resume": "Resume",
     "completedWithIssues": "Import finished · {{failed, number}} couldn't be imported, {{skipped, number}} unsupported skipped."
   },
   "errors": {

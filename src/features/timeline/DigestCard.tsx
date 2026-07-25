@@ -1,5 +1,6 @@
 import { useState } from 'react'
 import { useTranslation } from 'react-i18next'
+import { useNavigate } from 'react-router-dom'
 import { useUi } from '@/app/ui-store'
 import type { DayEntry, Photo } from '@/domain/models'
 import { cn } from '@/lib/cn'
@@ -14,6 +15,7 @@ type DigestDay = Extract<DayEntry, { kind: 'digest' }>
 export function DigestCard({ day }: { day: DigestDay }) {
   const { t, i18n } = useTranslation()
   const openLightbox = useUi((s) => s.openLightbox)
+  const navigate = useNavigate()
   const coverIds = day.cover.map((p) => p.id)
   const open = (i: number) =>
     openLightbox(coverIds, i, formatMonthDay(day.date, i18n.language), 'timeline')
@@ -37,14 +39,17 @@ export function DigestCard({ day }: { day: DigestDay }) {
         <CoverTile photo={day.cover[1]} onOpen={() => open(1)} />
         <CoverTile photo={day.cover[2]} onOpen={() => open(2)} />
         <CoverTile photo={day.cover[3]} onOpen={() => open(3)} />
-        {/* The overflow tile shows how many more photos this day holds (real data). It is
-            non-interactive until the day-detail screen (2b) exists — no dead action. */}
-        <div className="relative rounded-md overflow-hidden">
+        <button
+          type="button"
+          onClick={() => navigate(`/day/${day.date}`)}
+          aria-label={t('dayDetail.open')}
+          className="relative rounded-md overflow-hidden"
+        >
           <span className="ph absolute inset-0" />
           <span className="absolute inset-0 bg-black/50 flex items-center justify-center text-white">
             <span className="text-[15px] font-semibold">+{formatCount(overflow)}</span>
           </span>
-        </div>
+        </button>
       </div>
 
       <div className="flex gap-1.5 mt-3 overflow-x-auto">
@@ -52,6 +57,7 @@ export function DigestCard({ day }: { day: DigestDay }) {
           <button
             key={c.time}
             type="button"
+            onClick={() => navigate(`/day/${day.date}?time=${c.time}`)}
             className="shrink-0 rounded-md bg-secondary text-secondary-foreground px-2 py-1 text-[11px] hover:bg-accent"
           >
             <span className="font-mono text-muted-foreground">{c.time}</span> {c.label}{' '}

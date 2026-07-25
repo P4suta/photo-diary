@@ -1,33 +1,34 @@
 import { defineConfig, devices } from '@playwright/test'
 
-// E2E is heavy (browser launch). Run it locally via `just e2e` and in CI as a dedicated
-// job only; it's not part of pre-push / `just check`. Phase 1 uses MockPhotoLibrary, so it's deterministic.
+// E2E is heavy (browser launch). Run it locally via `just e2e` and in CI as a
+// dedicated job only; it isn't part of pre-push / `just check`.
 const CI = !!process.env.CI
+const E2E_PORT = 41739
+const E2E_URL = `http://127.0.0.1:${E2E_PORT}`
 
 export default defineConfig({
   testDir: './e2e',
   fullyParallel: true,
   forbidOnly: CI,
-  // global-setup warms the server before testing, so cold-start reloads don't ripple
-  // into individual tests. Locally 0 retries for an honest signal; CI uses 2 for network jitter.
+  // Locally 0 retries for an honest signal; CI uses 2 for process-start jitter.
   retries: CI ? 2 : 0,
-  // Fast once warm, but leave some slack for first-time module resolution.
+  // Leave some slack for first-time module resolution.
   timeout: 45_000,
-  // Warm the dev server serially before the parallel tests (absorbs dep re-bundle reloads).
-  globalSetup: './e2e/global-setup.ts',
-  workers: CI ? 1 : undefined,
+  // Windows can exhaust desktop-process resources when Playwright launches one
+  // browser worker per core. Two keeps local runs parallel and deterministic.
+  workers: CI ? 1 : 2,
   reporter: CI ? [['github'], ['html', { open: 'never' }]] : 'list',
   use: {
-    baseURL: 'http://localhost:5173',
+    baseURL: E2E_URL,
     trace: 'on-first-retry',
   },
   projects: [{ name: 'chromium', use: { ...devices['Desktop Chrome'] } }],
-  // Start the Vite dev server before tests; CI spins up a fresh one each time. Reloads from
-  // the first dep re-bundle are absorbed by each test's beforeEach (toPass wrapper).
+  // A dedicated strict port prevents a stale daily-development server from being
+  // mistaken for the test server. Always start and stop it with this test run.
   webServer: {
-    command: 'pnpm dev',
-    port: 5173,
-    reuseExistingServer: !CI,
+    command: `node ./node_modules/vite/bin/vite.js --host 127.0.0.1 --port ${E2E_PORT} --strictPort`,
+    url: E2E_URL,
+    reuseExistingServer: false,
     timeout: 120_000,
   },
 })

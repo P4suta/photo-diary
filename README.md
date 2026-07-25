@@ -4,7 +4,7 @@
 
 Your photos become your diary — no manual dating, no album wrangling. It groups your photos into "days" by capture time, lays them out chronologically, and lets you write a few lines about the day. You look back through a calendar and a yearly heatmap.
 
-> Status: in development. The React frontend and the Rust core (import/read) are implemented and tested; the Tauri v2 shell wires them together. On-device GUI verification and a couple of later screens remain — see [Status](#status).
+> Status: v0.1 for Windows. The React UI, Rust core and Tauri v2 shell are wired end to end and covered by browser, Rust and native Windows acceptance tests.
 
 ## Features
 
@@ -31,7 +31,7 @@ just setup   # pinned toolchain + git hooks + JS deps
 just dev     # Vite dev server → http://localhost:5173
 ```
 
-Run `just` with no arguments to list all recipes. Common ones: `just typecheck`, `just lint`, `just test`, `just check` (the full local gate), `just build`. For the desktop app: `just app-dev` / `just app-build`.
+Run `just` with no arguments to list all recipes. Common ones: `just typecheck`, `just lint`, `just test`, `just check` (including REUSE 3.3), and `just build`. For the desktop app: `just app-dev` / `just app-build`; Windows native acceptance is `just native-e2e`.
 
 ## Architecture
 
@@ -63,12 +63,12 @@ More detail: [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) and [`docs/DEVELOPME
 ## Status
 
 - **Frontend** — implemented. In browser dev, data comes from a mock (`MockPhotoLibrary` + `fixtures.ts`).
-- **Rust core** — implemented and tested: scanning, EXIF + orientation, thumbnails, full-res AVIF masters, SQLite with migrations, SHA-256 dedup, async import with per-file error reporting, and a read-query layer.
-- **Tauri shell** — exposes the core as IPC commands; import runs off the UI thread and streams per-file progress.
-- **Later screens** — day detail (2b) is an unrouted mock; multi-night events (2c) have types and a card but no backend grouping yet.
-- **Remaining** — on-device GUI verification (Windows/WebView2).
+- **Rust core** — SQLite v2, bounded timeline reads, stable day cursors, offline place resolution, caption/★/event persistence, export, cache recovery, recursive import and watched-folder jobs.
+- **Tauri shell** — real IPC for every library action plus startup scan, recursive watched-folder monitoring with 2-second debounce and 60-second reconnect, pause/resume and library-change events.
+- **Diary UI** — date/place search, virtualized day detail, time/place clusters, captions, multi-select ★, event metadata, calendar navigation, drag/drop onboarding, Settings operations and en/ja accessibility.
+- **Verification** — Vitest/Playwright, Rust test + Clippy, REUSE 3.3, and feature-isolated WebdriverIO native E2E against real SQLite/IPC on Windows.
 
-Known limitations: HEIC/HEIF/AVIF source files can't be decoded and are skipped (counted and reported, not fatal); import continues past corrupt files; search and several Settings controls are disabled placeholders until wired.
+Supported input is JPEG/PNG/WebP/TIFF/BMP/GIF. HEIC/HEIF/AVIF inputs are detected and skipped with counts; corrupt files are reported without aborting the rest of an import. Stored AVIF masters are internal diary copies, not backups of the original files.
 
 ## Contributing
 
@@ -82,3 +82,7 @@ Dual-licensed under either of
 - Apache License, Version 2.0 ([`LICENSE-APACHE`](LICENSE-APACHE))
 
 at your option. Unless you explicitly state otherwise, any contribution intentionally submitted for inclusion in this work shall be dual-licensed as above, without any additional terms or conditions.
+
+Copyright and license metadata is machine-checked against the REUSE Specification; see [`REUSE.toml`](REUSE.toml), [`LICENSES/`](LICENSES), and [`THIRD_PARTY_NOTICES.md`](THIRD_PARTY_NOTICES.md).
+
+The Windows binary includes `zenavif` for internal thumbnail recovery. That component is used under AGPL-3.0-only unless the distributor holds Imazen's commercial license; see the third-party notices before redistributing binaries.

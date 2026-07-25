@@ -1,0 +1,15 @@
+version = 1
+
+[[annotations]]
+path = ["**"]
+precedence = "aggregate"
+SPDX-FileCopyrightText = "2026 Yasunobu (P4suta)"
+SPDX-License-Identifier = "MIT OR Apache-2.0"
+
+# REUSE selects the latest matching annotation, so third-party overrides follow
+# the repository-wide project default.
+[[annotations]]
+path = ["third-party/zenavif-0.1.6.toml"]
+precedence = "override"
+SPDX-FileCopyrightText = "2026 Yasunobu (P4suta)"
+SPDX-License-Identifier = "AGPL-3.0-only"

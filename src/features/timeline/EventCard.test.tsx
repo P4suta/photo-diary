@@ -23,7 +23,7 @@ const event: Extract<DayEntry, { kind: 'event' }> = {
 describe('EventCard', () => {
   it('renders the title, date range, and total count', () => {
     renderWithProviders(<EventCard day={event} />)
-    expect(screen.getByText('Kanazawa & Noto, 4 days')).toBeInTheDocument()
+    expect(screen.getByDisplayValue('Kanazawa & Noto, 4 days')).toBeInTheDocument()
     expect(screen.getByText(/June/)).toBeInTheDocument()
     expect(screen.getByText('16,204 photos')).toBeInTheDocument()
   })

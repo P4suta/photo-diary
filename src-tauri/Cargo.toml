@@ -6,6 +6,11 @@ description = "photo-diary desktop shell (Tauri v2). UI from ../dist, real work 
 license = "MIT OR Apache-2.0"
 publish = false
 
+[features]
+default = []
+# Test-only data-dir override. Production builds never read PHOTO_DIARY_E2E_DATA_DIR.
+native-e2e = ["dep:tauri-plugin-wdio", "dep:tauri-plugin-wdio-webdriver"]
+
 [lib]
 name = "photo_diary_lib"
 
@@ -17,8 +22,10 @@ tauri = { version = "2", features = ["protocol-asset"] }
 tauri-plugin-dialog = "2"
 photo-diary-core = { path = "../crates/photo-diary-core" }
 serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+tauri-plugin-wdio = { version = "=1.2.0", optional = true }
+tauri-plugin-wdio-webdriver = { version = "=1.2.0", optional = true }
 
 [dev-dependencies]
 # Serde-contract tests pin the exact JSON keys the frontend reads for ImportDto and the
 # import-progress event payload. Already locked transitively via tauri; no version churn.
-serde_json = "1"

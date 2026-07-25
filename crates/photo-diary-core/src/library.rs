@@ -1,5 +1,7 @@
+use crate::avif_decode;
 use crate::db::Db;
 use crate::model::{NewPhoto, Stats};
+use crate::place::PlaceResolver;
 use crate::{exif, orient, scan, thumbnail, transcode, Result};
 use serde::Serialize;
 use sha2::{Digest, Sha256};
@@ -12,7 +14,8 @@ use time::UtcOffset;
 
 /// A single file that could not be imported (decode/EXIF/encode/IO failure). Collected so one
 /// bad file never aborts the whole folder import.
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "camelCase")]
 pub struct ImportFailure {
     pub path: String,
     pub reason: String,
@@ -112,6 +115,21 @@ impl Library {
         folder: &Path,
         on_progress: &dyn Fn(ImportProgress),
     ) -> Result<ImportSummary> {
+        self.import_folder_with_control(folder, on_progress, &|| {})
+    }
+
+    /// Import with a cooperative per-file boundary used by the single-flight job manager.
+    pub fn import_folder_with_control(
+        &self,
+        folder: &Path,
+        on_progress: &dyn Fn(ImportProgress),
+        before_file: &dyn Fn(),
+    ) -> Result<ImportSummary> {
+        if !folder.is_dir() {
+            return Err(crate::Error::Other(
+                "the import target must be an existing directory".to_string(),
+            ));
+        }
         // Register the folder and record this scan time; the returned id tags each photo.
         let folder_id = self
             .db()
@@ -130,6 +148,7 @@ impl Library {
 
         // A failure on one file must not abort the folder: collect it and keep going.
         for (i, src) in scan.images.iter().enumerate() {
+            before_file();
             match self.import_one(src, folder_id) {
                 Ok(ImportOutcome::Imported(saved)) => {
                     summary.imported += 1;
@@ -187,7 +206,6 @@ impl Library {
         let thumb_path = thumbnail::make_thumbnail(&oriented, &self.data_dir.join(&rel_thumb), 512)
             .ok()
             .map(|_| rel_thumb);
-
         let orig_bytes = fs::metadata(src)?.len() as i64;
         let bytes_saved = orig_bytes - avif.bytes as i64;
 
@@ -224,6 +242,111 @@ impl Library {
 
     pub fn toggle_star(&self, photo_id: i64) -> Result<bool> {
         self.db().toggle_star(photo_id)
+    }
+
+    pub fn save_caption(&self, photo_id: i64, caption: &str) -> Result<()> {
+        let trimmed = caption.trim();
+        self.db()
+            .set_caption(photo_id, (!trimmed.is_empty()).then_some(trimmed))
+    }
+
+    pub fn set_starred(&self, photo_ids: &[i64], starred: bool) -> Result<()> {
+        self.db().set_starred(photo_ids, starred)
+    }
+
+    pub fn save_event_metadata(&self, event: &crate::model::EventOverride) -> Result<()> {
+        self.db().save_event_override(event)
+    }
+
+    /// Backfills every row whose resolver version is stale. Rows without valid GPS are stamped
+    /// as resolved too, preventing an endless retry loop.
+    pub fn backfill_places(
+        &self,
+        resolver: &dyn PlaceResolver,
+        on_progress: &dyn Fn(u32, u32),
+    ) -> Result<u32> {
+        let rows = self.db().unresolved_places(resolver.version())?;
+        let total = rows.len() as u32;
+        for (index, (id, lat, lng)) in rows.into_iter().enumerate() {
+            let place = match (lat, lng) {
+                (Some(lat), Some(lng)) => resolver.resolve(lat, lng),
+                _ => None,
+            };
+            self.db()
+                .set_resolved_place(id, place.as_deref(), resolver.version())?;
+            on_progress((index + 1) as u32, total);
+        }
+        Ok(total)
+    }
+
+    /// Stops watching a folder without deleting any imported photo row or master.
+    pub fn remove_folder(&self, folder_id: i64) -> Result<()> {
+        self.db().remove_folder(folder_id)
+    }
+
+    /// Invalidates every DB thumbnail path and removes only files that are known thumbnail
+    /// children. Masters under `library/` are never touched.
+    pub fn clear_thumbnail_cache(&self) -> Result<u32> {
+        let sources = self.db().thumbnail_sources()?;
+        let mut removed = 0;
+        for (_, _, thumb) in &sources {
+            let Some(relative) = thumb else { continue };
+            let path = self.data_dir.join(relative);
+            if path.starts_with(&self.thumbs) && path.is_file() {
+                fs::remove_file(path)?;
+                removed += 1;
+            }
+        }
+        self.db().clear_thumbnail_paths()?;
+        Ok(removed)
+    }
+
+    /// Regenerates WebP thumbnails from internal AVIF masters. A bad master is reported and the
+    /// remaining cache continues; successful files are written to a temporary sibling before
+    /// replacement, and the DB path changes only after the final file exists.
+    pub fn regenerate_thumbnail_cache(&self) -> Result<CacheSummary> {
+        let sources = self.db().thumbnail_sources()?;
+        let mut summary = CacheSummary {
+            regenerated: 0,
+            failed: Vec::new(),
+        };
+        for (id, store_rel, _) in sources {
+            let source = self.data_dir.join(&store_rel);
+            let relative = format!("thumbnails/{id}.webp");
+            let destination = self.data_dir.join(&relative);
+            let temporary = self.thumbs.join(format!("{id}.tmp.webp"));
+            let result = (|| -> Result<()> {
+                let image = avif_decode::decode_internal_master(&source)?;
+                thumbnail::make_thumbnail(&image, &temporary, 512)?;
+                replace_file(&temporary, &destination)?;
+                self.db().set_thumbnail_path(id, Some(&relative))?;
+                Ok(())
+            })();
+            match result {
+                Ok(()) => summary.regenerated += 1,
+                Err(error) => {
+                    let _ = fs::remove_file(&temporary);
+                    summary.failed.push(ImportFailure {
+                        path: source.to_string_lossy().into_owned(),
+                        reason: error.to_string(),
+                    });
+                }
+            }
+        }
+        Ok(summary)
+    }
+
+    /// Copies the stored full-resolution master byte-for-byte to a caller-selected path.
+    pub fn export_photo(&self, photo_id: i64, destination: &Path) -> Result<u64> {
+        let relative = self.db().photo_store_path(photo_id)?;
+        let source = self.data_dir.join(relative);
+        if source == destination {
+            return Ok(fs::metadata(source)?.len());
+        }
+        if let Some(parent) = destination.parent() {
+            fs::create_dir_all(parent)?;
+        }
+        Ok(fs::copy(source, destination)?)
     }
 
     /// Internal storage directory (for the settings "open folder").
@@ -292,6 +415,33 @@ impl Library {
             location: self.store.to_string_lossy().into_owned(),
             last_import,
         })
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct CacheSummary {
+    pub regenerated: u32,
+    pub failed: Vec<ImportFailure>,
+}
+
+fn replace_file(source: &Path, destination: &Path) -> Result<()> {
+    if !destination.exists() {
+        fs::rename(source, destination)?;
+        return Ok(());
+    }
+    let backup = destination.with_extension("webp.previous");
+    let _ = fs::remove_file(&backup);
+    fs::rename(destination, &backup)?;
+    match fs::rename(source, destination) {
+        Ok(()) => {
+            let _ = fs::remove_file(backup);
+            Ok(())
+        }
+        Err(error) => {
+            let _ = fs::rename(backup, destination);
+            Err(error.into())
+        }
     }
 }
 
@@ -370,7 +520,21 @@ fn mtime_iso(path: &Path, offset: UtcOffset) -> Result<String> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::model::EventOverride;
     use image::{Rgb, RgbImage};
+    use std::cell::RefCell;
+
+    struct FixedPlaceResolver;
+
+    impl PlaceResolver for FixedPlaceResolver {
+        fn resolve(&self, lat: f64, lng: f64) -> Option<String> {
+            Some(format!("{lat:.1},{lng:.1}"))
+        }
+
+        fn version(&self) -> i64 {
+            7
+        }
+    }
 
     fn make_lib(dir: &Path) -> Library {
         let db = Db::open_in_memory().unwrap();
@@ -412,6 +576,19 @@ mod tests {
         assert_eq!(second.imported, 0);
         assert_eq!(second.skipped, 2);
         assert_eq!(lib.stats().unwrap().photo_count, 2);
+    }
+
+    #[test]
+    fn import_rejects_a_file_path_without_registering_a_folder() {
+        let dir = tempfile::tempdir().unwrap();
+        let lib = make_lib(dir.path());
+        let file = dir.path().join("single.png");
+        write_png(&file, 20, 20, 10);
+
+        let error = lib.import_folder(&file).unwrap_err().to_string();
+        assert!(error.contains("existing directory"));
+        assert!(lib.list_folders().unwrap().is_empty());
+        assert_eq!(lib.stats().unwrap().photo_count, 0);
     }
 
     #[test]
@@ -571,6 +748,221 @@ mod tests {
             "dto store_path is an absolute master path under the data dir: {}",
             dto.store_path
         );
+    }
+
+    #[test]
+    fn cache_export_and_unwatch_never_remove_masters_or_photos() {
+        let dir = tempfile::tempdir().unwrap();
+        let lib = make_lib(dir.path());
+        let src = dir.path().join("in");
+        fs::create_dir_all(&src).unwrap();
+        write_png(&src.join("p.png"), 40, 30, 128);
+        lib.import_folder(&src).unwrap();
+
+        let folder_id = lib.list_folders().unwrap()[0].id.parse::<i64>().unwrap();
+        let photo = lib.list_photos().unwrap().remove(0);
+        let master = PathBuf::from(&photo.store_path);
+        let master_bytes = fs::read(&master).unwrap();
+        let exported = dir.path().join("exported.avif");
+        assert_eq!(
+            lib.export_photo(photo.id.parse().unwrap(), &exported)
+                .unwrap(),
+            master_bytes.len() as u64
+        );
+        assert_eq!(fs::read(&exported).unwrap(), master_bytes);
+
+        assert_eq!(lib.clear_thumbnail_cache().unwrap(), 1);
+        assert!(master.exists(), "clearing thumbnails keeps the AVIF master");
+        let regenerated = lib.regenerate_thumbnail_cache().unwrap();
+        assert_eq!(regenerated.regenerated, 1);
+        assert!(regenerated.failed.is_empty());
+
+        lib.remove_folder(folder_id).unwrap();
+        assert!(lib.list_folders().unwrap().is_empty());
+        assert_eq!(lib.stats().unwrap().photo_count, 1);
+        assert!(master.exists(), "unwatching keeps imported masters");
+    }
+
+    #[test]
+    fn cache_regeneration_decodes_avif_masters_and_continues_after_corruption() {
+        let dir = tempfile::tempdir().unwrap();
+        let lib = make_lib(dir.path());
+        let src = dir.path().join("in");
+        fs::create_dir_all(&src).unwrap();
+        write_png(&src.join("good.png"), 40, 30, 64);
+        write_png(&src.join("corrupt.png"), 30, 40, 192);
+        lib.import_folder(&src).unwrap();
+
+        let photos = lib.list_photos().unwrap();
+        assert_eq!(photos.len(), 2);
+        lib.clear_thumbnail_cache().unwrap();
+        fs::write(&photos[0].store_path, b"not an AVIF").unwrap();
+
+        let summary = lib.regenerate_thumbnail_cache().unwrap();
+        assert_eq!(summary.regenerated, 1);
+        assert_eq!(summary.failed.len(), 1);
+        assert_eq!(summary.failed[0].path, photos[0].store_path);
+        assert!(
+            summary.failed[0].reason.contains("avif decode error"),
+            "failure identifies the AVIF decoder: {}",
+            summary.failed[0].reason
+        );
+        assert_eq!(lib.stats().unwrap().photo_count, 2);
+        let paths: Vec<Option<String>> = lib
+            .db()
+            .conn
+            .prepare("SELECT thumb_path FROM photos ORDER BY id")
+            .unwrap()
+            .query_map([], |row| row.get(0))
+            .unwrap()
+            .collect::<std::result::Result<_, _>>()
+            .unwrap();
+        assert_eq!(paths.iter().filter(|path| path.is_some()).count(), 1);
+    }
+
+    #[test]
+    fn metadata_and_place_backfill_library_contracts_persist() {
+        let dir = tempfile::tempdir().unwrap();
+        let lib = make_lib(dir.path());
+        let src = dir.path().join("in");
+        fs::create_dir_all(&src).unwrap();
+        write_png(&src.join("a.png"), 24, 18, 10);
+        write_png(&src.join("b.png"), 24, 18, 20);
+        lib.import_folder(&src).unwrap();
+
+        let ids: Vec<i64> = lib
+            .list_photos()
+            .unwrap()
+            .into_iter()
+            .map(|photo| photo.id.parse().unwrap())
+            .collect();
+        assert_eq!(ids.len(), 2);
+
+        lib.save_caption(ids[0], "  sunrise  ").unwrap();
+        let photo_date = lib.list_photos().unwrap()[0].taken_at[..10].to_string();
+        assert_eq!(
+            lib.db()
+                .photos_on_date(&photo_date)
+                .unwrap()
+                .iter()
+                .find(|photo| photo.id == ids[0])
+                .unwrap()
+                .caption
+                .as_deref(),
+            Some("sunrise")
+        );
+        lib.save_caption(ids[0], " \n\t ").unwrap();
+        assert_eq!(
+            lib.db()
+                .conn
+                .query_row("SELECT caption FROM photos WHERE id=?1", [ids[0]], |row| {
+                    row.get::<_, Option<String>>(0)
+                })
+                .unwrap(),
+            None
+        );
+
+        lib.set_starred(&ids, true).unwrap();
+        assert_eq!(lib.list_starred().unwrap().len(), 2);
+
+        let event = EventOverride {
+            id: "trip".to_string(),
+            start_date: "2026-07-04".to_string(),
+            end_date: "2026-07-06".to_string(),
+            title: "Weekend".to_string(),
+            note: Some("offline".to_string()),
+        };
+        lib.save_event_metadata(&event).unwrap();
+        assert_eq!(lib.db().event_overrides().unwrap(), vec![event]);
+
+        {
+            let db = lib.db();
+            db.conn
+                .execute(
+                    "UPDATE photos SET lat=35.0, lng=139.0, place=NULL, place_resolver_version=0",
+                    [],
+                )
+                .unwrap();
+        }
+        let progress = RefCell::new(Vec::new());
+        assert_eq!(
+            lib.backfill_places(&FixedPlaceResolver, &|current, total| {
+                progress.borrow_mut().push((current, total));
+            })
+            .unwrap(),
+            2
+        );
+        assert_eq!(*progress.borrow(), vec![(1, 2), (2, 2)]);
+        assert_eq!(
+            lib.backfill_places(&FixedPlaceResolver, &|_, _| {})
+                .unwrap(),
+            0,
+            "rows stamped with the current resolver version are not repeated"
+        );
+        let resolved: Vec<(Option<String>, i64)> = {
+            let db = lib.db();
+            let mut stmt = db
+                .conn
+                .prepare("SELECT place, place_resolver_version FROM photos ORDER BY id")
+                .unwrap();
+            stmt.query_map([], |row| Ok((row.get(0)?, row.get(1)?)))
+                .unwrap()
+                .collect::<rusqlite::Result<Vec<_>>>()
+                .unwrap()
+        };
+        assert_eq!(
+            resolved,
+            vec![
+                (Some("35.0,139.0".to_string()), 7),
+                (Some("35.0,139.0".to_string()), 7)
+            ]
+        );
+    }
+
+    #[test]
+    fn clear_cache_counts_only_managed_thumbnail_files() {
+        let dir = tempfile::tempdir().unwrap();
+        let lib = make_lib(dir.path());
+        let src = dir.path().join("in");
+        fs::create_dir_all(&src).unwrap();
+        write_png(&src.join("a.png"), 24, 18, 10);
+        write_png(&src.join("b.png"), 24, 18, 20);
+        write_png(&src.join("c.png"), 24, 18, 30);
+        lib.import_folder(&src).unwrap();
+
+        let outside = dir.path().join("outside.webp");
+        fs::write(&outside, b"must remain").unwrap();
+        let outside_id: i64 = lib.list_photos().unwrap()[0].id.parse().unwrap();
+        lib.db()
+            .set_thumbnail_path(outside_id, Some("outside.webp"))
+            .unwrap();
+
+        assert_eq!(lib.clear_thumbnail_cache().unwrap(), 2);
+        assert_eq!(fs::read(&outside).unwrap(), b"must remain");
+        assert!(lib
+            .db()
+            .thumbnail_sources()
+            .unwrap()
+            .iter()
+            .all(|(_, _, thumb)| thumb.is_none()));
+    }
+
+    #[test]
+    fn replace_file_installs_new_content_for_new_and_existing_destinations() {
+        let dir = tempfile::tempdir().unwrap();
+        let destination = dir.path().join("thumb.webp");
+        let first = dir.path().join("first.tmp.webp");
+        fs::write(&first, b"first").unwrap();
+        replace_file(&first, &destination).unwrap();
+        assert_eq!(fs::read(&destination).unwrap(), b"first");
+        assert!(!first.exists());
+
+        let second = dir.path().join("second.tmp.webp");
+        fs::write(&second, b"second").unwrap();
+        replace_file(&second, &destination).unwrap();
+        assert_eq!(fs::read(&destination).unwrap(), b"second");
+        assert!(!second.exists());
+        assert!(!destination.with_extension("webp.previous").exists());
     }
 
     #[test]

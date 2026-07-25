@@ -1,7 +1,9 @@
-use crate::model::{NewPhoto, PhotoRow, Stats};
+use crate::model::{EventOverride, NewPhoto, PhotoRow, Stats};
 use crate::Result;
 use rusqlite::{params, Connection, OptionalExtension, Row};
 use std::path::Path;
+
+pub type UnresolvedPlace = (i64, Option<f64>, Option<f64>);
 
 /// SQLite wrapper. Schema mirrors `src/domain` (frontend):
 /// - `photos(id, store_path UNIQUE, store_bytes, thumb_path, taken_at, lat, lng,
@@ -22,7 +24,8 @@ pub struct Db {
 /// Pre-release: there is no path from an unversioned (user_version 0, pre-migration) dev
 /// database — those must be deleted and re-imported. This only matters for local dev DBs;
 /// there are no released users yet.
-const MIGRATIONS: &[&str] = &["\
+const MIGRATIONS: &[&str] = &[
+    "\
 CREATE TABLE folders (
     id        INTEGER PRIMARY KEY AUTOINCREMENT,
     path      TEXT NOT NULL UNIQUE,
@@ -53,7 +56,29 @@ CREATE TABLE day_notes (
     updated_at TEXT NOT NULL
 );
 CREATE INDEX idx_photos_day ON photos (substr(taken_at, 1, 10));
-"];
+",
+    "\
+ALTER TABLE photos ADD COLUMN place_resolver_version INTEGER NOT NULL DEFAULT 0;
+CREATE INDEX IF NOT EXISTS idx_photos_timeline
+    ON photos (taken_at DESC, id DESC);
+CREATE INDEX IF NOT EXISTS idx_photos_day_cursor
+    ON photos (substr(taken_at, 1, 10), starred, taken_at, id);
+CREATE INDEX IF NOT EXISTS idx_photos_place_timeline
+    ON photos (place, taken_at DESC, id DESC);
+CREATE INDEX IF NOT EXISTS idx_photos_folder
+    ON photos (folder_id);
+CREATE TABLE IF NOT EXISTS event_overrides (
+    id         TEXT PRIMARY KEY,
+    start_date TEXT NOT NULL,
+    end_date   TEXT NOT NULL,
+    title      TEXT NOT NULL,
+    note       TEXT,
+    updated_at TEXT NOT NULL
+);
+CREATE UNIQUE INDEX IF NOT EXISTS idx_event_overrides_span
+    ON event_overrides (start_date, end_date);
+",
+];
 
 impl Db {
     /// Internal helper that builds a migrated `Db`.
@@ -193,10 +218,147 @@ impl Db {
         Ok(starred != 0)
     }
 
-    pub fn set_caption(&self, photo_id: i64, caption: &str) -> Result<()> {
+    pub fn set_caption(&self, photo_id: i64, caption: Option<&str>) -> Result<()> {
         self.conn.execute(
             "UPDATE photos SET caption = ?2 WHERE id = ?1",
             params![photo_id, caption],
+        )?;
+        Ok(())
+    }
+
+    /// Sets the same star state for a batch in one transaction.
+    pub fn set_starred(&mut self, photo_ids: &[i64], starred: bool) -> Result<()> {
+        let tx = self.conn.transaction()?;
+        {
+            let mut stmt = tx.prepare("UPDATE photos SET starred = ?2 WHERE id = ?1")?;
+            for id in photo_ids {
+                stmt.execute(params![id, i64::from(starred)])?;
+            }
+        }
+        tx.commit()?;
+        Ok(())
+    }
+
+    /// Removes only the watcher registration. Imported photo rows and masters are retained;
+    /// their `folder_id` is detached first so the foreign key remains valid.
+    pub fn remove_folder(&mut self, folder_id: i64) -> Result<()> {
+        let tx = self.conn.transaction()?;
+        tx.execute(
+            "UPDATE photos SET folder_id = NULL WHERE folder_id = ?1",
+            [folder_id],
+        )?;
+        tx.execute("DELETE FROM folders WHERE id = ?1", [folder_id])?;
+        tx.commit()?;
+        Ok(())
+    }
+
+    /// Atomically persists user-authored metadata for a detected event span.
+    pub fn save_event_override(&self, event: &EventOverride) -> Result<()> {
+        self.conn.execute(
+            "INSERT INTO event_overrides (id, start_date, end_date, title, note, updated_at)
+             VALUES (?1, ?2, ?3, ?4, ?5, datetime('now'))
+             ON CONFLICT(id) DO UPDATE SET
+                start_date = excluded.start_date,
+                end_date = excluded.end_date,
+                title = excluded.title,
+                note = excluded.note,
+                updated_at = excluded.updated_at",
+            params![
+                event.id,
+                event.start_date,
+                event.end_date,
+                event.title,
+                event.note
+            ],
+        )?;
+        Ok(())
+    }
+
+    pub fn event_overrides(&self) -> Result<Vec<EventOverride>> {
+        let mut stmt = self.conn.prepare(
+            "SELECT id, start_date, end_date, title, note
+             FROM event_overrides ORDER BY start_date DESC, end_date DESC",
+        )?;
+        let rows = stmt.query_map([], |r| {
+            Ok(EventOverride {
+                id: r.get(0)?,
+                start_date: r.get(1)?,
+                end_date: r.get(2)?,
+                title: r.get(3)?,
+                note: r.get(4)?,
+            })
+        })?;
+        let mut out = Vec::new();
+        for row in rows {
+            out.push(row?);
+        }
+        Ok(out)
+    }
+
+    /// Thumbnail cache rows. The returned paths are DB-relative.
+    pub fn thumbnail_sources(&self) -> Result<Vec<(i64, String, Option<String>)>> {
+        let mut stmt = self
+            .conn
+            .prepare("SELECT id, store_path, thumb_path FROM photos ORDER BY id")?;
+        let rows = stmt.query_map([], |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?)))?;
+        let mut out = Vec::new();
+        for row in rows {
+            out.push(row?);
+        }
+        Ok(out)
+    }
+
+    pub fn set_thumbnail_path(&self, photo_id: i64, path: Option<&str>) -> Result<()> {
+        self.conn.execute(
+            "UPDATE photos SET thumb_path = ?2 WHERE id = ?1",
+            params![photo_id, path],
+        )?;
+        Ok(())
+    }
+
+    pub fn clear_thumbnail_paths(&self) -> Result<()> {
+        self.conn
+            .execute("UPDATE photos SET thumb_path = NULL", [])?;
+        Ok(())
+    }
+
+    pub fn photo_store_path(&self, photo_id: i64) -> Result<String> {
+        Ok(self.conn.query_row(
+            "SELECT store_path FROM photos WHERE id = ?1",
+            [photo_id],
+            |r| r.get(0),
+        )?)
+    }
+
+    /// Rows that need the current offline place resolver. A version is stamped even when
+    /// no nearby city is found, so the same coordinates are not reprocessed every startup.
+    pub fn unresolved_places(&self, resolver_version: i64) -> Result<Vec<UnresolvedPlace>> {
+        let mut stmt = self.conn.prepare(
+            "SELECT id, lat, lng FROM photos
+             WHERE place_resolver_version < ?1
+             ORDER BY id",
+        )?;
+        let rows = stmt.query_map([resolver_version], |r| {
+            Ok((r.get(0)?, r.get(1)?, r.get(2)?))
+        })?;
+        let mut out = Vec::new();
+        for row in rows {
+            out.push(row?);
+        }
+        Ok(out)
+    }
+
+    pub fn set_resolved_place(
+        &self,
+        photo_id: i64,
+        place: Option<&str>,
+        resolver_version: i64,
+    ) -> Result<()> {
+        self.conn.execute(
+            "UPDATE photos
+             SET place = ?2, place_resolver_version = ?3
+             WHERE id = ?1",
+            params![photo_id, place, resolver_version],
         )?;
         Ok(())
     }
@@ -209,7 +371,7 @@ impl Db {
                     starred, caption
              FROM photos
              WHERE substr(taken_at, 1, 10) = ?1
-             ORDER BY taken_at ASC",
+             ORDER BY taken_at ASC, id ASC",
         )?;
         let rows = stmt.query_map([date], Self::map_photo_row)?;
         let mut out = Vec::new();
@@ -321,10 +483,10 @@ mod tests {
     }
 
     #[test]
-    fn fresh_db_is_stamped_at_schema_v1() {
-        // The migration scaffold applies v1 and records it via PRAGMA user_version.
+    fn fresh_db_is_stamped_at_schema_v2() {
+        // The migration scaffold applies every migration and records v2.
         let db = Db::open_in_memory().unwrap();
-        assert_eq!(db.user_version().unwrap(), 1);
+        assert_eq!(db.user_version().unwrap(), 2);
     }
 
     #[test]
@@ -333,11 +495,11 @@ mod tests {
         let path = dir.path().join("photo-diary.db");
         {
             let db = Db::open(&path).unwrap();
-            assert_eq!(db.user_version().unwrap(), 1);
+            assert_eq!(db.user_version().unwrap(), 2);
         }
-        // Reopening an already-v1 database is a no-op and stays at v1.
+        // Reopening an already-v2 database is a no-op and stays at v2.
         let db = Db::open(&path).unwrap();
-        assert_eq!(db.user_version().unwrap(), 1);
+        assert_eq!(db.user_version().unwrap(), 2);
     }
 
     #[test]
@@ -460,7 +622,7 @@ mod tests {
         let id = db
             .insert_photo(&sample_photo("h1", "2026-07-04T16:42:00"))
             .unwrap();
-        db.set_caption(id, "sunset").unwrap();
+        db.set_caption(id, Some("sunset")).unwrap();
         let rows = db.photos_on_date("2026-07-04").unwrap();
         assert_eq!(rows[0].caption, Some("sunset".to_string()));
     }
@@ -574,5 +736,127 @@ mod tests {
         let db = Db::open(&path).unwrap();
         assert!(db.photo_exists("h1").unwrap());
         assert_eq!(db.photos_on_date("2026-07-04").unwrap().len(), 1);
+    }
+
+    #[test]
+    fn v2_migration_preserves_photo_place_and_caption() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("v1.db");
+        {
+            let conn = Connection::open(&path).unwrap();
+            conn.execute_batch(MIGRATIONS[0]).unwrap();
+            conn.pragma_update(None, "user_version", 1).unwrap();
+            let db = Db { conn };
+            let id = db
+                .insert_photo(&sample_photo("legacy", "2026-07-04T16:42:00"))
+                .unwrap();
+            db.set_caption(id, Some("legacy caption")).unwrap();
+        }
+
+        let db = Db::open(&path).unwrap();
+        let (place, caption, resolver_version): (Option<String>, Option<String>, i64) = db
+            .conn
+            .query_row(
+                "SELECT place, caption, place_resolver_version FROM photos WHERE original_hash='legacy'",
+                [],
+                |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?)),
+            )
+            .unwrap();
+        assert_eq!(place.as_deref(), Some("Tokyo"));
+        assert_eq!(caption.as_deref(), Some("legacy caption"));
+        assert_eq!(resolver_version, 0);
+        assert_eq!(
+            db.conn
+                .pragma_query_value(None, "user_version", |r| r.get::<_, i64>(0))
+                .unwrap(),
+            2
+        );
+    }
+
+    #[test]
+    fn v2_metadata_thumbnail_and_place_contracts_persist() {
+        let mut db = Db::open_in_memory().unwrap();
+        let first = db
+            .insert_photo(&sample_photo("first", "2026-07-04T08:00:00"))
+            .unwrap();
+        let second = db
+            .insert_photo(&sample_photo("second", "2026-07-04T09:00:00"))
+            .unwrap();
+
+        db.set_starred(&[first, second], true).unwrap();
+        assert!(db
+            .photos_on_date("2026-07-04")
+            .unwrap()
+            .iter()
+            .all(|p| p.starred));
+        db.set_starred(&[second], false).unwrap();
+        let photos = db.photos_on_date("2026-07-04").unwrap();
+        assert!(photos.iter().find(|p| p.id == first).unwrap().starred);
+        assert!(!photos.iter().find(|p| p.id == second).unwrap().starred);
+
+        let event = EventOverride {
+            id: "2026-07-04..2026-07-06".to_string(),
+            start_date: "2026-07-04".to_string(),
+            end_date: "2026-07-06".to_string(),
+            title: "Tokyo weekend".to_string(),
+            note: Some("Two nights".to_string()),
+        };
+        db.save_event_override(&event).unwrap();
+        assert_eq!(db.event_overrides().unwrap(), vec![event.clone()]);
+        let updated = EventOverride {
+            title: "Updated trip".to_string(),
+            note: None,
+            ..event
+        };
+        db.save_event_override(&updated).unwrap();
+        assert_eq!(db.event_overrides().unwrap(), vec![updated]);
+
+        db.set_thumbnail_path(first, None).unwrap();
+        db.set_thumbnail_path(second, Some("thumbnails/custom.webp"))
+            .unwrap();
+        let sources = db.thumbnail_sources().unwrap();
+        assert_eq!(
+            sources.iter().find(|(id, _, _)| *id == first).unwrap().2,
+            None
+        );
+        assert_eq!(
+            sources
+                .iter()
+                .find(|(id, _, _)| *id == second)
+                .unwrap()
+                .2
+                .as_deref(),
+            Some("thumbnails/custom.webp")
+        );
+        db.clear_thumbnail_paths().unwrap();
+        assert!(db
+            .thumbnail_sources()
+            .unwrap()
+            .iter()
+            .all(|(_, _, thumb)| thumb.is_none()));
+
+        assert_eq!(
+            db.unresolved_places(7).unwrap(),
+            vec![
+                (first, Some(35.0), Some(139.0)),
+                (second, Some(35.0), Some(139.0))
+            ]
+        );
+        db.set_resolved_place(first, Some("Yokohama, JP"), 7)
+            .unwrap();
+        assert_eq!(
+            db.unresolved_places(7).unwrap(),
+            vec![(second, Some(35.0), Some(139.0))]
+        );
+        let (place, version): (Option<String>, i64) = db
+            .conn
+            .query_row(
+                "SELECT place, place_resolver_version FROM photos WHERE id=?1",
+                [first],
+                |row| Ok((row.get(0)?, row.get(1)?)),
+            )
+            .unwrap();
+        assert_eq!(place.as_deref(), Some("Yokohama, JP"));
+        assert_eq!(version, 7);
     }
 }

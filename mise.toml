@@ -11,8 +11,8 @@ node = "24.18.0"
 pnpm = "10.34.4"
 # Lint + format for TS/TSX/JSON (biome check / --write). One version, local + CI.
 biome = "2.5.0"
-# Phase 2: the Rust core (photo-diary-core) and Tauri shell (src-tauri). Separate from the
-# global mise rust, we exact-pin the version per-project too, to keep local == CI.
+# The Rust core (photo-diary-core) and Tauri shell (src-tauri). Separate from the
+# global mise rust, exact-pin the version per-project too, to keep local == CI.
 # Components are pinned explicitly: `check-rust` runs clippy + rustfmt, and mise's
 # default rust profile is minimal (no clippy on a clean CI runner), so declare them
 # here — otherwise local (which had them) and CI diverge.
@@ -36,6 +36,9 @@ lefthook = "2.1.9"
 # StrykerJS side on the TS pure-logic layers. cargo backend, binstalled
 # (prebuilt binary from the GitHub release). Exact-pinned.
 "cargo:cargo-mutants" = "27.1.0"
+# REUSE 3.3 compliance checker. The pipx backend keeps the Python tool isolated
+# while still exact-pinning the same CLI locally and in CI.
+"pipx:reuse" = "6.2.0"
 
 [settings]
 # Fetch cargo: backend tools as prebuilt binaries (cargo-binstall) instead of

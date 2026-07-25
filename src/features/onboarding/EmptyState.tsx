@@ -1,9 +1,11 @@
-import { useEffect, useRef } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { Trans, useTranslation } from 'react-i18next'
 import { Link, useNavigate } from 'react-router-dom'
+import { isTauri } from '@/app/env'
 import { useFolders } from '@/app/queries'
 import { useAddPhotos } from '@/app/use-add-photos'
 import { Button } from '@/ui/Button'
+import { subscribeToFolderDrops } from './folder-drop'
 
 /** Onboarding shown when no folder is registered yet (1h). */
 export function EmptyState() {
@@ -11,6 +13,13 @@ export function EmptyState() {
   const navigate = useNavigate()
   const { data: folders } = useFolders()
   const { addPhotos, isPending } = useAddPhotos()
+  const [dragging, setDragging] = useState(false)
+  const [dropReady, setDropReady] = useState(false)
+  const addPhotosRef = useRef(addPhotos)
+
+  useEffect(() => {
+    addPhotosRef.current = addPhotos
+  }, [addPhotos])
 
   // Once an import fills a library that began empty, leave onboarding for the timeline.
   // Reacting to `folders` (rather than navigating straight after the import) avoids racing
@@ -22,9 +31,38 @@ export function EmptyState() {
     if (startedEmpty.current && folders.length > 0) navigate('/', { replace: true })
   }, [folders, navigate])
 
+  useEffect(() => {
+    if (!isTauri) return
+    let active = true
+    let stop: (() => void) | undefined
+    void subscribeToFolderDrops({
+      onDragging: (value) => {
+        if (!active) return
+        setDragging(value)
+      },
+      onDrop: (path) => {
+        if (active) void addPhotosRef.current(path)
+      },
+    }).then((unlisten) => {
+      if (active) {
+        stop = unlisten
+        setDropReady(true)
+      } else unlisten()
+    })
+    return () => {
+      active = false
+      stop?.()
+    }
+  }, [])
+
   return (
     <div className="min-h-screen bg-background text-foreground flex items-center justify-center p-8">
-      <div className="w-[520px] max-w-full rounded-xl border border-dashed border-input p-10 text-center">
+      <div
+        data-drop-ready={dropReady}
+        className={`w-[520px] max-w-full rounded-xl border border-dashed p-10 text-center ${
+          dragging ? 'border-[color:var(--moss)] bg-accent' : 'border-input'
+        }`}
+      >
         <div className="flex justify-center gap-1.5">
           <div className="ph w-10 h-12 rounded-md rotate-[-6deg]" />
           <div className="ph w-10 h-12 rounded-md" />
@@ -42,6 +80,7 @@ export function EmptyState() {
             {t('onboarding.chooseFolder')}
           </Button>
         </div>
+        <div className="mt-3 text-[11px] text-muted-foreground">{t('onboarding.dropFolder')}</div>
         <div className="mt-6 font-mono text-[10px] text-muted-foreground">
           {t('onboarding.formats')}
         </div>

@@ -1,9 +1,13 @@
+import { useState } from 'react'
 import { useTranslation } from 'react-i18next'
+import { useLibrary } from '@/app/library-context'
 import { useUi } from '@/app/ui-store'
 
 /** Import progress (1f). Panel ⇄ minimized toast. Driven by the real per-file channel. */
 export function ImportOverlay() {
   const { t } = useTranslation()
+  const library = useLibrary()
+  const [paused, setPaused] = useState(false)
   const importState = useUi((s) => s.importState)
   const setImportState = useUi((s) => s.setImportState)
   const progress = useUi((s) => s.importProgress)
@@ -63,6 +67,17 @@ export function ImportOverlay() {
           </div>
         )}
         <div className="mt-4 flex items-center gap-2">
+          <button
+            type="button"
+            className="h-8 rounded-md border border-input px-3 text-[12px] hover:bg-accent"
+            onClick={() => {
+              const next = !paused
+              setPaused(next)
+              void library.setImportPaused(next)
+            }}
+          >
+            {t(paused ? 'import.resume' : 'import.pause')}
+          </button>
           <button
             type="button"
             className="ml-auto h-8 rounded-md px-3 text-[12px] text-muted-foreground hover:bg-accent"

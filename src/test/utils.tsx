@@ -34,6 +34,15 @@ const emptyStats: LibraryStats = {
 export function makeFakeLibrary(overrides: Partial<PhotoLibrary> = {}): PhotoLibrary {
   return {
     listTimeline: vi.fn().mockResolvedValue([]),
+    getDaySummary: vi.fn().mockResolvedValue({
+      date: '2026-07-05',
+      place: null,
+      photoCount: 0,
+      starredCount: 0,
+      note: null,
+      clusters: [],
+    }),
+    getDayPhotos: vi.fn().mockResolvedValue({ photos: [], nextCursor: null }),
     getMonth: vi.fn().mockResolvedValue([]),
     getHeatmap: vi.fn().mockResolvedValue([]),
     getHighlights: vi.fn().mockResolvedValue({ total: 0, libraryTotal: 0, months: [] }),
@@ -50,6 +59,25 @@ export function makeFakeLibrary(overrides: Partial<PhotoLibrary> = {}): PhotoLib
     }),
     saveNote: vi.fn().mockResolvedValue(undefined),
     toggleStar: vi.fn().mockResolvedValue(undefined),
+    saveCaption: vi.fn().mockResolvedValue(undefined),
+    setStarred: vi.fn().mockResolvedValue(undefined),
+    saveEventMetadata: vi.fn().mockResolvedValue(undefined),
+    rescanFolder: vi.fn().mockResolvedValue({
+      imported: 0,
+      skipped: 0,
+      skippedUnsupported: 0,
+      bytesSaved: 0,
+      failed: [],
+      scanErrors: [],
+    }),
+    removeFolder: vi.fn().mockResolvedValue(undefined),
+    setImportPaused: vi.fn().mockResolvedValue(undefined),
+    getJobState: vi.fn().mockResolvedValue({ running: false, paused: false }),
+    clearThumbnailCache: vi.fn().mockResolvedValue(0),
+    regenerateThumbnailCache: vi.fn().mockResolvedValue({ regenerated: 0, failed: [] }),
+    openLibrary: vi.fn().mockResolvedValue(undefined),
+    exportPhoto: vi.fn().mockResolvedValue(0),
+    subscribeLibraryEvents: vi.fn().mockResolvedValue(() => {}),
     ...overrides,
   }
 }

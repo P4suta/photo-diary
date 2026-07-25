@@ -9,7 +9,7 @@
     "verbatimModuleSyntax": true,
     "moduleDetection": "force",
     "noEmit": true,
-    "types": ["node"],
+    "types": ["node", "@wdio/globals/types", "@wdio/mocha-framework", "@wdio/tauri-service"],
     "strict": true,
     "noUnusedLocals": true,
     "noUnusedParameters": true
@@ -18,5 +18,13 @@
   // itself lives in tsconfig.app.json; everything that runs in Node instead of the
   // browser is checked here so `tsc -b` covers it. These files were previously
   // type-checked by nothing.
-  "include": ["vite.config.ts", "playwright.config.ts", "tailwind.config.ts", "e2e/**/*.ts"]
+  "include": [
+    "vite.config.ts",
+    "playwright.config.ts",
+    "tailwind.config.ts",
+    "wdio.conf.ts",
+    "wdio.restart.conf.ts",
+    "e2e/**/*.ts",
+    "native-e2e/**/*.ts"
+  ]
 }

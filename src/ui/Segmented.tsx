@@ -19,7 +19,7 @@ export function Segmented<T extends string>({
   return (
     <div
       className={cn(
-        'inline-flex rounded-md border border-input overflow-hidden text-[12px]',
+        'inline-flex shrink-0 rounded-md border border-input overflow-hidden text-[12px]',
         className,
       )}
     >
@@ -31,7 +31,7 @@ export function Segmented<T extends string>({
             type="button"
             onClick={() => onChange(opt.value)}
             className={cn(
-              'px-4 py-1.5 transition-colors',
+              'shrink-0 whitespace-nowrap px-3 py-1.5 transition-colors',
               i > 0 && 'border-l border-input',
               active
                 ? 'bg-secondary text-secondary-foreground font-medium'

@@ -1,16 +1,29 @@
 import { convertFileSrc } from '@tauri-apps/api/core'
-import { buildHeatWeeks, buildMonthCells, buildTimeline, groupHighlights } from '@/domain/build'
+import { listen } from '@tauri-apps/api/event'
+import {
+  buildHeatWeeks,
+  buildMonthCells,
+  buildTimelineFromDays,
+  groupHighlights,
+} from '@/domain/build'
 import type { MonthCell } from '@/domain/calendar'
 import type { HeatWeek } from '@/domain/heatmap'
 import type {
   AspectRatio,
   DayEntry,
+  DayPhotosPage,
+  DaySummary,
+  EventMetadata,
   HighlightsData,
   ImportProgress,
   ImportResult,
+  JobState,
+  LibraryEvent,
   LibraryStats,
   Photo,
   PlaceFacet,
+  ThumbnailCacheResult,
+  TimelineFilter,
   WatchedFolder,
 } from '@/domain/models'
 import type { PhotoLibrary } from '@/domain/ports'
@@ -55,9 +68,35 @@ function todayParts() {
  * is assembled by pure functions in `@/domain/build`. The UI stays unchanged.
  */
 export class TauriPhotoLibrary implements PhotoLibrary {
-  async listTimeline(): Promise<DayEntry[]> {
-    const [photos, notes] = await Promise.all([backend.listPhotos(), backend.listNotes()])
-    return buildTimeline(photos.map(mapPhoto), notes, todayParts().iso)
+  async listTimeline(filter?: TimelineFilter): Promise<DayEntry[]> {
+    const [days, overrides] = await Promise.all([
+      backend.listTimeline(filter),
+      backend.listEventOverrides(),
+    ])
+    return buildTimelineFromDays(
+      days.map((day) => ({ ...day, photos: day.photos.map(mapPhoto) })),
+      overrides,
+      todayParts().iso,
+    )
+  }
+
+  getDaySummary(date: string): Promise<DaySummary> {
+    return backend.getDaySummary(date)
+  }
+
+  async getDayPhotos(input: {
+    date: string
+    cursor?: string | null
+    limit?: number
+    starredOnly?: boolean
+  }): Promise<DayPhotosPage> {
+    const page = await backend.getDayPhotos({
+      date: input.date,
+      cursor: input.cursor,
+      limit: input.limit ?? 120,
+      starredOnly: input.starredOnly ?? false,
+    })
+    return { photos: page.photos.map(mapPhoto), nextCursor: page.nextCursor }
   }
 
   async getMonth(year: number, month: number): Promise<MonthCell[]> {
@@ -95,8 +134,8 @@ export class TauriPhotoLibrary implements PhotoLibrary {
     }))
   }
 
-  async listPlaceFacets(): Promise<PlaceFacet[]> {
-    const facets = await backend.placeFacets()
+  async listPlaceFacets(filter?: TimelineFilter): Promise<PlaceFacet[]> {
+    const facets = await backend.placeFacets(filter)
     return facets.map((f) => ({
       label: f.label,
       count: f.count,
@@ -110,12 +149,75 @@ export class TauriPhotoLibrary implements PhotoLibrary {
   }
 
   async toggleStar(photoId: string): Promise<void> {
-    const n = Number(photoId)
-    // Reject a bad id loudly instead of silently no-opping. Note Number('') === 0 is
-    // finite, so an empty/whitespace id must be rejected explicitly, not just via NaN.
-    if (photoId.trim() === '' || !Number.isInteger(n)) {
-      throw new Error(`toggleStar: non-numeric photo id ${JSON.stringify(photoId)}`)
-    }
-    await backend.toggleStar(n)
+    await backend.toggleStar(numericId(photoId, 'toggleStar'))
   }
+
+  saveCaption(photoId: string, caption: string): Promise<void> {
+    return backend.saveCaption(numericId(photoId, 'saveCaption'), caption)
+  }
+
+  setStarred(photoIds: string[], starred: boolean): Promise<void> {
+    return backend.setStarred(
+      photoIds.map((id) => numericId(id, 'setStarred')),
+      starred,
+    )
+  }
+
+  saveEventMetadata(event: EventMetadata): Promise<void> {
+    return backend.saveEventMetadata(event)
+  }
+
+  rescanFolder(folderId: string): Promise<ImportResult> {
+    return backend.rescanFolder(numericId(folderId, 'rescanFolder'))
+  }
+
+  removeFolder(folderId: string): Promise<void> {
+    return backend.removeFolder(numericId(folderId, 'removeFolder'))
+  }
+
+  setImportPaused(paused: boolean): Promise<void> {
+    return backend.setImportPaused(paused)
+  }
+
+  getJobState(): Promise<JobState> {
+    return backend.getJobState()
+  }
+
+  clearThumbnailCache(): Promise<number> {
+    return backend.clearThumbnailCache()
+  }
+
+  regenerateThumbnailCache(): Promise<ThumbnailCacheResult> {
+    return backend.regenerateThumbnailCache()
+  }
+
+  openLibrary(): Promise<void> {
+    return backend.openLibrary()
+  }
+
+  exportPhoto(photoId: string, destination: string): Promise<number> {
+    return backend.exportPhoto(numericId(photoId, 'exportPhoto'), destination)
+  }
+
+  async subscribeLibraryEvents(listener: (event: LibraryEvent) => void): Promise<() => void> {
+    const unlistenChanged = await listen<string>('library://changed', () =>
+      listener({ kind: 'changed' }),
+    )
+    const unlistenPlaces = await listen<{ current: number; total: number }>(
+      'library://place-progress',
+      ({ payload }) => listener({ kind: 'place-progress', ...payload }),
+    )
+    return () => {
+      unlistenChanged()
+      unlistenPlaces()
+    }
+  }
+}
+
+function numericId(value: string, operation: string): number {
+  const n = Number(value)
+  if (value.trim() === '' || !Number.isInteger(n)) {
+    throw new Error(`${operation}: non-numeric id ${JSON.stringify(value)}`)
+  }
+  return n
 }
