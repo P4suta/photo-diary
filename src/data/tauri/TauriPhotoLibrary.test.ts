@@ -40,6 +40,25 @@ const t = vi.hoisted(() => {
 
   const dayOf = (taken: string) => taken.slice(0, 10)
 
+  function timelineDays() {
+    const dates = new Set(state.photos.map((photo) => dayOf(photo.taken)))
+    for (const date of state.notes.keys()) dates.add(date)
+    return [...dates]
+      .sort((a, b) => b.localeCompare(a))
+      .map((date) => {
+        const photos = state.photos
+          .filter((photo) => dayOf(photo.taken) === date)
+          .sort((a, b) => a.taken.localeCompare(b.taken))
+        return {
+          date,
+          place: photos.find((photo) => photo.place != null)?.place ?? null,
+          photoCount: photos.length,
+          note: state.notes.get(date) ?? null,
+          photos: photos.map(photoDto),
+        }
+      })
+  }
+
   // A Rust PhotoDto (serde `rename_all = "camelCase"`).
   function photoDto(r: Row) {
     return {
@@ -71,6 +90,10 @@ const t = vi.hoisted(() => {
     switch (cmd) {
       case 'list_photos':
         return state.photos.map(photoDto)
+      case 'list_timeline':
+        return timelineDays()
+      case 'list_event_overrides':
+        return []
       case 'list_starred':
         return state.photos.filter((p) => p.starred).map(photoDto)
       case 'list_notes':

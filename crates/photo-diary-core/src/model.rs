@@ -85,3 +85,13 @@ pub struct Stats {
     pub day_count: i64,
     pub starred_count: i64,
 }
+
+/// Persisted user metadata for one automatically detected multi-night event.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct EventOverride {
+    pub id: String,
+    pub start_date: String,
+    pub end_date: String,
+    pub title: String,
+    pub note: Option<String>,
+}

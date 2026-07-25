@@ -88,7 +88,7 @@ describe('DayCard exhaustive switch', () => {
 
   it('event: renders the title and day rows', () => {
     renderWithProviders(<DayCard day={days.event} />)
-    expect(screen.getByText('Kanazawa & Noto')).toBeInTheDocument()
+    expect(screen.getByDisplayValue('Kanazawa & Noto')).toBeInTheDocument()
     expect(screen.getByText(/Jun 24/)).toBeInTheDocument()
   })
 

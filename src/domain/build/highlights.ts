@@ -21,10 +21,9 @@ export function groupHighlights(photos: Photo[], libraryTotal: number): Highligh
     }
   }
 
-  const months: HighlightMonth[] = [...groups.keys()]
-    .sort((a, b) => (a < b ? 1 : a > b ? -1 : 0))
-    .map((key) => {
-      const monthPhotos = groups.get(key) ?? []
+  const months: HighlightMonth[] = [...groups.entries()]
+    .sort(([a], [b]) => b.localeCompare(a))
+    .map(([key, monthPhotos]) => {
       return { yearMonth: key, count: monthPhotos.length, photos: monthPhotos }
     })
 

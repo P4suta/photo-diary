@@ -1,8 +1,8 @@
 import { expect, test } from '@playwright/test'
 
 // End-to-end pass over the core experience: capture date → day → photos in order →
-// note → review. Phase 1 (browser dev) uses MockPhotoLibrary, so content is
-// deterministic. The default locale is `en`.
+// note → review. Browser E2E uses MockPhotoLibrary, so content is deterministic.
+// The default locale is `en`.
 
 test.beforeEach(async ({ page }) => {
   // vite dev re-bundles deps once on first start and does a full reload (ERR_ABORTED).

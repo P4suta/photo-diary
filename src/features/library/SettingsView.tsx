@@ -2,8 +2,9 @@ import type { ReactNode } from 'react'
 import { useTranslation } from 'react-i18next'
 import { Link } from 'react-router-dom'
 import type { Locale } from '@/app/i18n'
-import { useFolders, useStats } from '@/app/queries'
+import { useFolders, useLibraryActions, useStats } from '@/app/queries'
 import { type Accent, type ThemeMode, useTheme } from '@/app/theme'
+import { useAddPhotos } from '@/app/use-add-photos'
 import type { WatchedFolder } from '@/domain/models'
 import { formatImportedAt } from '@/lib/datetime'
 import { formatBytes, formatCount, splitBytes } from '@/lib/format'
@@ -16,6 +17,8 @@ export function SettingsView() {
   const { t, i18n } = useTranslation()
   const { data: folders, isError: foldersError, refetch: refetchFolders } = useFolders()
   const { data: stats, isError: statsError, refetch: refetchStats } = useStats()
+  const actions = useLibraryActions()
+  const { addPhotos, isPending: addingFolder } = useAddPhotos()
   const { mode, accent, showEmptyDays, setMode, setAccent, setShowEmptyDays } = useTheme()
   // Folders + internal-library are backend-driven; the Appearance section is pure client
   // state, so a load failure only replaces the data region — theme controls stay usable.
@@ -44,11 +47,25 @@ export function SettingsView() {
               </p>
               <div className="mt-3 rounded-lg border border-border divide-y divide-border overflow-hidden">
                 {folders?.map((f) => (
-                  <FolderRow key={f.id} folder={f} />
+                  <FolderRow
+                    key={f.id}
+                    folder={f}
+                    onRescan={() => actions.rescan.mutate(f.id)}
+                    onRemove={() => {
+                      if (window.confirm(t('settings.removeConfirm', { path: f.path }))) {
+                        actions.remove.mutate(f.id)
+                      }
+                    }}
+                    pending={actions.rescan.isPending || actions.remove.isPending}
+                  />
                 ))}
               </div>
-              {/* Adding folders isn't wired yet — disable rather than show a dead control. */}
-              <Button variant="outline" className="mt-3" disabled>
+              <Button
+                variant="outline"
+                className="mt-3"
+                onClick={() => void addPhotos()}
+                disabled={addingFolder}
+              >
                 {t('settings.addFolder')}
               </Button>
             </section>
@@ -80,7 +97,13 @@ export function SettingsView() {
                     </div>
                     <div className="font-mono text-[12px] truncate mt-0.5">{stats.location}</div>
                   </div>
-                  <Button variant="outline" size="sm" className="ml-auto shrink-0" disabled>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    className="ml-auto shrink-0"
+                    onClick={() => actions.openLibrary.mutate()}
+                    disabled={actions.openLibrary.isPending}
+                  >
                     {t('settings.openFolder')}
                   </Button>
                 </div>
@@ -96,12 +119,29 @@ export function SettingsView() {
                       </span>
                     </div>
                   </div>
-                  {/* Cache regeneration/clearing isn't wired yet — disable until implemented. */}
                   <div className="ml-auto flex items-center gap-1.5 shrink-0">
-                    <Button variant="outline" size="sm" disabled>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      disabled={actions.regenerateCache.isPending}
+                      onClick={() => {
+                        if (window.confirm(t('settings.regenerateConfirm'))) {
+                          actions.regenerateCache.mutate()
+                        }
+                      }}
+                    >
                       {t('settings.regenerate')}
                     </Button>
-                    <Button variant="ghost" size="sm" disabled>
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      disabled={actions.clearCache.isPending}
+                      onClick={() => {
+                        if (window.confirm(t('settings.clearConfirm'))) {
+                          actions.clearCache.mutate()
+                        }
+                      }}
+                    >
                       {t('settings.clear')}
                     </Button>
                   </div>
@@ -173,7 +213,17 @@ export function SettingsView() {
   )
 }
 
-function FolderRow({ folder }: { folder: WatchedFolder }) {
+function FolderRow({
+  folder,
+  onRescan,
+  onRemove,
+  pending,
+}: {
+  folder: WatchedFolder
+  onRescan: () => void
+  onRemove: () => void
+  pending: boolean
+}) {
   const { t, i18n } = useTranslation()
   const state = folder.status === 'watching' ? t('settings.watching') : t('settings.disconnected')
   // lastScan is a raw ISO timestamp (empty until first scan); format for display.
@@ -186,12 +236,11 @@ function FolderRow({ folder }: { folder: WatchedFolder }) {
         <div className="font-mono text-[12px] truncate">{folder.path}</div>
         <div className="font-mono text-[10px] text-muted-foreground mt-0.5">{status}</div>
       </div>
-      {/* Rescan / remove aren't wired yet — disable (especially the destructive Remove). */}
       <div className="ml-auto flex items-center gap-1.5 shrink-0">
-        <Button variant="outline" size="sm" disabled>
+        <Button variant="outline" size="sm" onClick={onRescan} disabled={pending}>
           {t('settings.rescan')}
         </Button>
-        <Button variant="danger" size="sm" disabled>
+        <Button variant="danger" size="sm" onClick={onRemove} disabled={pending}>
           {t('settings.remove')}
         </Button>
       </div>

@@ -1,10 +1,14 @@
+import { useLocation } from 'react-router-dom'
 import { useTimeline } from '@/app/queries'
 import { useTheme } from '@/app/theme'
+import { parseTimelineFilter } from '@/domain/search'
 import { ErrorPanel } from '@/ui/ErrorPanel'
 import { DayCard } from './DayCard'
 
 export function TimelineView() {
-  const { data: days, isError, refetch } = useTimeline()
+  const location = useLocation()
+  const filter = parseTimelineFilter(location.search)
+  const { data: days, isError, refetch } = useTimeline(filter)
   const showEmptyDays = useTheme((s) => s.showEmptyDays)
 
   return (

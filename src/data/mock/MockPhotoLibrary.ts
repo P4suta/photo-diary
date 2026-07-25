@@ -1,14 +1,22 @@
-import { buildHeatWeeks, buildMonthCells } from '@/domain/build'
+import { buildClusters, buildHeatWeeks, buildMonthCells } from '@/domain/build'
 import type { MonthCell } from '@/domain/calendar'
 import type { HeatWeek } from '@/domain/heatmap'
 import type {
   DayEntry,
+  DayPhotosPage,
+  DaySummary,
+  EventMetadata,
   HighlightMonth,
   HighlightsData,
   ImportProgress,
   ImportResult,
+  JobState,
+  LibraryEvent,
   LibraryStats,
+  Photo,
   PlaceFacet,
+  ThumbnailCacheResult,
+  TimelineFilter,
   WatchedFolder,
 } from '@/domain/models'
 import type { PhotoLibrary } from '@/domain/ports'
@@ -26,8 +34,8 @@ import {
 } from './fixtures'
 
 /**
- * Phase 1 in-memory implementation; swapped for TauriPhotoLibrary in phase 2.
- * The UI depends only on the PhotoLibrary port, so the swap is painless.
+ * Deterministic in-memory implementation for browser development and tests.
+ * Production uses TauriPhotoLibrary behind the same PhotoLibrary port.
  *
  * Views (calendar / heatmap) are derived from raw fixture records through the very
  * same `@/domain/build` functions the real backend uses — one derivation path, no
@@ -41,9 +49,77 @@ export class MockPhotoLibrary implements PhotoLibrary {
     ...m,
     photos: m.photos.map((p) => ({ ...p })),
   }))
+  private watchedFolders: WatchedFolder[] = folders.map((folder) => ({ ...folder }))
+  private paused = false
+  private listeners = new Set<(event: LibraryEvent) => void>()
 
-  listTimeline(): Promise<DayEntry[]> {
-    return Promise.resolve(this.days)
+  listTimeline(filter?: TimelineFilter): Promise<DayEntry[]> {
+    if (!filter || (!filter.startDate && !filter.endDate && filter.places.length === 0)) {
+      return Promise.resolve(this.days)
+    }
+    const matchesPhoto = (photo: Photo) => {
+      const date = photo.takenAt.slice(0, 10)
+      if (filter.startDate && date < filter.startDate) return false
+      if (filter.endDate && date > filter.endDate) return false
+      if (filter.places.length > 0 && !filter.places.includes(photo.place)) return false
+      return true
+    }
+    const out: DayEntry[] = []
+    for (const day of this.days) {
+      if (day.kind === 'photos') {
+        const photos = day.photos.filter(matchesPhoto)
+        if (photos.length > 0) out.push({ ...day, photos, place: photos[0].place })
+      } else if (day.kind === 'digest') {
+        const cover = day.cover.filter(matchesPhoto)
+        if (cover.length > 0) out.push({ ...day, cover, photoCount: cover.length })
+      } else if (day.kind === 'event') {
+        const dateMatches = day.days.some(
+          ({ date }) =>
+            (!filter.startDate || date >= filter.startDate) &&
+            (!filter.endDate || date <= filter.endDate),
+        )
+        const placeMatches = filter.places.length === 0 || filter.places.includes(day.place)
+        if (dateMatches && placeMatches) out.push(day)
+      }
+    }
+    return Promise.resolve(out)
+  }
+
+  getDaySummary(date: string): Promise<DaySummary> {
+    const day = this.days.find((entry) => entry.date === date)
+    const photos = photosForDay(day)
+    const photoCount =
+      day?.kind === 'digest' || day?.kind === 'event' ? day.photoCount : photos.length
+    return Promise.resolve({
+      date,
+      place: day?.place ?? null,
+      photoCount,
+      starredCount: photos.filter((photo) => photo.starred).length,
+      note: day && day.kind !== 'empty' ? day.note : null,
+      clusters: day?.kind === 'digest' ? day.clusters : buildClusters(photos, day?.place ?? null),
+    })
+  }
+
+  getDayPhotos(input: {
+    date: string
+    cursor?: string | null
+    limit?: number
+    starredOnly?: boolean
+  }): Promise<DayPhotosPage> {
+    const day = this.days.find((entry) => entry.date === input.date)
+    let photos =
+      day?.kind === 'digest'
+        ? Array.from({ length: day.photoCount }, (_, index) => digestPhoto(day, index))
+        : photosForDay(day)
+    if (input.starredOnly) photos = photos.filter((photo) => photo.starred)
+    const offset = input.cursor ? Number(input.cursor) : 0
+    const limit = input.limit ?? 120
+    const page = photos.slice(offset, offset + limit)
+    const next = offset + page.length
+    return Promise.resolve({
+      photos: page,
+      nextCursor: next < photos.length ? String(next) : null,
+    })
   }
 
   // Fixed to July 2026: only that month carries records; other months are empty grids.
@@ -75,11 +151,17 @@ export class MockPhotoLibrary implements PhotoLibrary {
   }
 
   listFolders(): Promise<WatchedFolder[]> {
-    return Promise.resolve(folders)
+    return Promise.resolve(this.watchedFolders)
   }
 
-  listPlaceFacets(): Promise<PlaceFacet[]> {
-    return Promise.resolve(placeFacets)
+  listPlaceFacets(filter?: TimelineFilter): Promise<PlaceFacet[]> {
+    if (!filter?.startDate && !filter?.endDate) return Promise.resolve(placeFacets)
+    return Promise.resolve(
+      placeFacets.map((facet) => ({
+        ...facet,
+        selected: filter?.places.includes(facet.muted ? null : facet.label) ?? false,
+      })),
+    )
   }
 
   // Simulate an import so the browser-dev overlay shows real progress (no real files).
@@ -92,7 +174,7 @@ export class MockPhotoLibrary implements PhotoLibrary {
       onProgress?.({ current, total, filename: `IMG_${1000 + current}.jpg` })
       await new Promise((resolve) => setTimeout(resolve, 60))
     }
-    return {
+    const result = {
       imported: total,
       skipped: 0,
       skippedUnsupported: 0,
@@ -100,6 +182,8 @@ export class MockPhotoLibrary implements PhotoLibrary {
       failed: [],
       scanErrors: [],
     }
+    this.emit({ kind: 'changed' })
+    return result
   }
 
   saveNote(date: string, note: string): Promise<void> {
@@ -148,4 +232,122 @@ export class MockPhotoLibrary implements PhotoLibrary {
     }))
     return Promise.resolve()
   }
+
+  saveCaption(photoId: string, caption: string): Promise<void> {
+    const value = caption.trim() || null
+    this.days = mapTimelinePhotos(this.days, (photo) =>
+      photo.id === photoId ? { ...photo, caption: value } : photo,
+    )
+    this.highlightMonths = this.highlightMonths.map((month) => ({
+      ...month,
+      photos: month.photos.map((photo) =>
+        photo.id === photoId ? { ...photo, caption: value } : photo,
+      ),
+    }))
+    this.emit({ kind: 'changed' })
+    return Promise.resolve()
+  }
+
+  setStarred(photoIds: string[], starred: boolean): Promise<void> {
+    const ids = new Set(photoIds)
+    this.days = mapTimelinePhotos(this.days, (photo) =>
+      ids.has(photo.id) ? { ...photo, starred } : photo,
+    )
+    this.highlightMonths = this.highlightMonths.map((month) => ({
+      ...month,
+      photos: month.photos.map((photo) => (ids.has(photo.id) ? { ...photo, starred } : photo)),
+    }))
+    this.emit({ kind: 'changed' })
+    return Promise.resolve()
+  }
+
+  saveEventMetadata(event: EventMetadata): Promise<void> {
+    this.days = this.days.map((day) =>
+      day.kind === 'event' &&
+      (event.id === `event:${day.start}:${day.end}` ||
+        (event.startDate === day.start && event.endDate === day.end))
+        ? { ...day, title: event.title, note: event.note }
+        : day,
+    )
+    this.emit({ kind: 'changed' })
+    return Promise.resolve()
+  }
+
+  rescanFolder(_folderId: string): Promise<ImportResult> {
+    return Promise.resolve({
+      imported: 0,
+      skipped: 24,
+      skippedUnsupported: 0,
+      bytesSaved: 0,
+      failed: [],
+      scanErrors: [],
+    })
+  }
+
+  removeFolder(folderId: string): Promise<void> {
+    this.watchedFolders = this.watchedFolders.filter((folder) => folder.id !== folderId)
+    this.emit({ kind: 'changed' })
+    return Promise.resolve()
+  }
+
+  setImportPaused(paused: boolean): Promise<void> {
+    this.paused = paused
+    return Promise.resolve()
+  }
+
+  getJobState(): Promise<JobState> {
+    return Promise.resolve({ running: false, paused: this.paused })
+  }
+
+  clearThumbnailCache(): Promise<number> {
+    return Promise.resolve(0)
+  }
+
+  regenerateThumbnailCache(): Promise<ThumbnailCacheResult> {
+    return Promise.resolve({ regenerated: 0, failed: [] })
+  }
+
+  openLibrary(): Promise<void> {
+    return Promise.resolve()
+  }
+
+  exportPhoto(_photoId: string, _destination: string): Promise<number> {
+    return Promise.resolve(0)
+  }
+
+  subscribeLibraryEvents(listener: (event: LibraryEvent) => void): Promise<() => void> {
+    this.listeners.add(listener)
+    return Promise.resolve(() => this.listeners.delete(listener))
+  }
+
+  private emit(event: LibraryEvent) {
+    for (const listener of this.listeners) listener(event)
+  }
+}
+
+function photosForDay(day: DayEntry | undefined): Photo[] {
+  if (day?.kind === 'photos') return day.photos
+  if (day?.kind === 'digest') return day.cover
+  return []
+}
+
+function digestPhoto(day: Extract<DayEntry, { kind: 'digest' }>, index: number): Photo {
+  const source = day.cover[index % day.cover.length]
+  const minute = Math.floor((index * 1_439) / Math.max(1, day.photoCount - 1))
+  const hourText = String(Math.floor(minute / 60)).padStart(2, '0')
+  const minuteText = String(minute % 60).padStart(2, '0')
+  return {
+    ...source,
+    id: `digest:${day.date}:${index}`,
+    takenAt: `${day.date}T${hourText}:${minuteText}:00`,
+    place: day.place,
+  }
+}
+
+function mapTimelinePhotos(days: DayEntry[], map: (photo: Photo) => Photo): DayEntry[] {
+  return days.map((day) => {
+    if (day.kind === 'photos') return { ...day, photos: day.photos.map(map) }
+    if (day.kind === 'digest') return { ...day, cover: day.cover.map(map) }
+    return day
+  })
 }

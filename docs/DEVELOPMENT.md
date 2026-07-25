@@ -12,10 +12,7 @@ photo-diary is a local desktop photo diary app aiming to sit "halfway between a 
 
 ## Current phase and non-goals
 
-photo-diary proceeds in 2 phases; **both are now implemented.** The seam between them is what you must not break.
-
-- **Phase 1 — implemented.** The React / TypeScript / Vite / Tailwind frontend. In browser dev (`http://localhost:5173`) the data is mocked (`src/data/mock/`) and every screen works.
-- **Phase 2 — implemented.** A Tauri v2 shell (`src-tauri/`) and a Rust core (`crates/photo-diary-core/`) are in place, and `TauriPhotoLibrary` (`src/data/tauri/`) implements the same port. `providers.tsx` chooses the backend at **runtime** via `isTauri` — mock in the browser, Rust core inside the desktop window — so the UI never changed (see "How the two backends plug in" below). Still partial: day detail (2b) is an unrouted mock, and multi-night events (2c) have types/cards but no backend grouping.
+photo-diary v0.1 has one end-to-end architecture. The React frontend uses a browser mock during UI development and the Tauri adapter in the Windows app. Day detail, event grouping, search, live folder updates and Settings actions all cross the same `PhotoLibrary` seam.
 
 What it deliberately won't do (non-goals):
 
@@ -36,7 +33,7 @@ Even if it compiles, breaking these is a regression. Dependencies point **inward
 
 ## Toolchain & shell promises
 
-- **Tools are pinned in `mise.toml`, all exact.** node (24.18.0), pnpm (10.34.4), biome (2.5.0), rust (1.96.0), just (1.54.0), lefthook (2.1.9), `github:crate-ci/typos` (1.47.2), `cargo:committed` (1.1.11), `cargo:taplo-cli` (0.10.0) are declared — no floating majors or `lts`, so local and CI resolve byte-identical versions. **Rust for the Phase 2 core/shell is provisioned by mise too** (`rust = "1.96.0"`); don't `rustup`/`winget`/hand-install it — add tools to `mise.toml` and run `mise install` (or `just setup`). `cargo.binstall = true` under `[settings]` makes cargo-backend tools fetch prebuilt binaries rather than compiling from source (fast on both local and CI).
+- **Tools are pinned in `mise.toml`, all exact.** node (24.18.0), pnpm (10.34.4), biome (2.5.0), rust (1.96.0), just (1.54.0), lefthook (2.1.9), `github:crate-ci/typos` (1.47.2), `cargo:committed` (1.1.11), `cargo:taplo-cli` (0.10.0), and `pipx:reuse` (6.2.0) are declared. Don't hand-install project tools; add them to `mise.toml` and run `mise install`.
 - **`just` is the only entry point.** Route dev / build work through justfile recipes. Don't invoke raw `pnpm` / `biome` / `git` directly in routines — add a recipe. That keeps the bundling/gating logic in one place. Right after `just setup`, run `just doctor` to confirm the environment matches the pins.
 - **The package manager is pnpm.** `npm` is not used (`package.json`'s `packageManager`: `pnpm@10.34.4`). The content-addressed store and strict `node_modules` are the reasons. CI uses `pnpm install --frozen-lockfile`, so always commit `pnpm-lock.yaml` when you change dependencies.
 - **Don't write shell-specific syntax into justfile / lefthook.** The justfile declares `set windows-shell := ["powershell.exe", "-NoProfile", "-Command"]` on Windows. Don't chain multiple steps with `&&`; split them into recipe lines (or hook jobs). For ad hoc one-offs use PowerShell (this repo's primary shell), and Git Bash only when POSIX is genuinely required.
@@ -56,18 +53,20 @@ Even if it compiles, breaking these is a regression. Dependencies point **inward
 | `just typos` | `typos` | spell-check the sources |
 | `just test` / `test-watch` | `vitest run` / `vitest` | unit / component / contract / a11y |
 | `just coverage` | `vitest run --coverage` | tests + V8 coverage (thresholds on domain/lib) |
-| `just check` | `typecheck` + `lint` + `typos` + `coverage` | the full local gate (identical to CI) |
+| `just reuse` | `reuse lint` | REUSE 3.3 copyright/license metadata |
+| `just check` | `typecheck` + `lint` + `typos` + `reuse` + `coverage` | the full local gate (identical to CI) |
 | `just e2e` | `playwright test` | end-to-end (browser); not part of `check` |
 | `just verify` | `check` + `build` + `e2e` | full local acceptance |
 | `just build` | `pnpm build` (`tsc -b && vite build`) | production build |
 | `just clean` | remove `dist` and `node_modules/.vite` | node_modules is kept |
-| `just app-dev` / `app-build` | `pnpm tauri dev` / `build` | run / package the desktop app (Phase 2) |
+| `just app-dev` / `app-build` | `pnpm tauri dev` / `build` | run / package the Windows desktop app |
 | `just app-test` / `app-lint` | `cargo test --workspace` / clippy + `fmt --check` | Rust core + shell |
 | `just check-rust` | `app-test` + `app-lint` | the full Rust-side gate |
+| `just native-e2e` | feature-isolated Tauri build + WDIO | Windows real SQLite/IPC acceptance |
 | `just mutation` / `mutation-rust` | StrykerJS (TS domain/lib) / cargo-mutants (Rust core), whole repo | mutation baseline (manual, heavy) |
 | `just mutation-diff` / `mutation-rust-diff` | the same, but only what changed vs a base ref | the PR-diff mutation gate |
 
-The pnpm scripts (`package.json`) are `dev` / `build` / `preview` / `typecheck` / `test` / `coverage` / `e2e` / `tauri`. The justfile wraps these. Day to day, use `just` rather than raw pnpm. First E2E run locally needs the browser once: `pnpm exec playwright install chromium`.
+The pnpm scripts (`package.json`) include `dev` / `build` / `preview` / `typecheck` / `test` / `coverage` / `e2e` / `native-e2e` / `tauri`. The justfile wraps these. Day to day, use `just` rather than raw pnpm. First browser E2E run locally needs Chromium once: `pnpm exec playwright install chromium`. Windows native E2E follows Tauri's WebdriverIO approach and uses the feature-isolated test build from `just native-e2e`.
 
 ## Quality gates (hooks / CI)
 
@@ -79,7 +78,7 @@ The gates share one definition between local and CI. The hooks are managed by le
   - `typos` — spell-check the whole working tree (config `_typos.toml`).
   - `taplo fmt --check` — check that staged `*.toml` are formatted (config `taplo.toml`).
 - **pre-push** — `just check` (= typecheck + Biome + typos + coverage). Plus `rust-gate`: `just check-rust`, glob-filtered so it only runs when the push touches `*.rs` / `Cargo.*` (a JS-only push skips it).
-- **CI** (`.github/workflows/ci.yml`, `push: [main]` and all PRs) — four jobs. **check**: `jdx/mise-action` → `pnpm install --frozen-lockfile` → `just check` → `just build` (pnpm store cached). **e2e**: installs the Playwright browser (`playwright install --with-deps chromium`) and runs `just e2e`. **rust**: an Ubuntu + Windows matrix that installs Tauri's Linux system libs (WebKitGTK etc.) on Linux, caches cargo, and runs `just check-rust`. **mutation** (PR-only): diffs the PR against its base and runs `just mutation-diff` / `just mutation-rust-diff` on just the changed code.
+- **CI** (`.github/workflows/ci.yml`, `push: [main]` and all PRs) — **check** includes REUSE 3.3, **e2e** runs Playwright, **rust** runs Linux + Windows gates, **native-e2e** drives the feature-isolated Tauri binary with embedded WDIO on Windows, and **mutation** checks changed pure logic.
 
 Because the hooks and CI run the same recipes, `--no-verify` only defers a failure to CI.
 
@@ -91,7 +90,7 @@ Coverage proves a line *ran*; mutation testing proves a test would *fail* if tha
 - **The two sides gate differently.** Stryker uses a percentage `break` threshold (`thresholds.break`); cargo-mutants has **no percentage** — a single surviving mutant exits non-zero. Mind the asymmetry when reading failures.
 - **A whole-file caveat (TS).** Stryker has no line-level diff filter, so `--mutate <changed file>` re-mutates the *entire* file — a one-line edit to a big well-tested file can surface a pre-existing survivor. `incremental` (cached in CI) reuses unchanged mutants to soften this; cargo-mutants is line-scoped and doesn't have the issue.
 - **Baselines & thresholds (measured).** TS full baseline is **87.3%** (StrykerJS over domain/lib; lowest files are `domain/tokens.ts` 75% and `build/timeline.ts` 80%). `stryker.config.json` sets `break: 70` — under the lowest file so touching existing code doesn't spuriously fail, while still catching a genuinely weak change. **The TS diff gate is enforced.**
-- **Rust needs single-threaded tests.** cargo-mutants runs with `--test-threads=1` (`.cargo/mutants.toml`) because the db migration tests (e.g. `db::tests::migrations_are_idempotent`) are not parallel-hermetic under cargo-mutants' isolated target dir and flake the unmutated baseline; `cargo test --workspace` itself stays parallel and green. The **Rust diff gate is report-only** (step-level `continue-on-error`) until a few PRs confirm the baseline holds on CI — then drop the flag to enforce. Making those tests hermetic would let the `--test-threads=1` workaround go away too.
+- **Rust needs single-threaded mutation tests.** cargo-mutants runs with `--test-threads=1` (`.cargo/mutants.toml`) because the db migration tests can otherwise contend under cargo-mutants' isolated target dir; `cargo test --workspace` itself stays parallel and green. The Rust diff gate is enforced: any surviving changed mutant exits non-zero and fails CI.
 
 ## Editor
 
@@ -128,12 +127,12 @@ A feature encapsulates UI and hooks under `src/features/<name>/` (existing: `tim
 
 ## How the two backends plug in
 
-Phase 2 **added** a Tauri v2 shell and a Rust core without rewriting `src/ui` / `src/features` / `src/domain`. The shape it took (follow it when extending the backend):
+The Tauri v2 shell and Rust core plug in without rewriting `src/ui` / `src/features` / `src/domain`. Follow this shape when extending the backend:
 
-1. **The Rust core** (`crates/photo-diary-core/`): `kamadak-exif` for EXIF (+ orientation correction), `image`'s `AvifEncoder` for full-res visually-lossless AVIF masters, `walkdir` for scanning, `rusqlite` (SQLite, `user_version` migrations) for metadata, `sha2` for folder dedup. Import is async with per-file error reporting; HEIC/HEIF/AVIF are skipped as unsupported (the `image` crate can't decode them). Imported photos are kept permanently as lightweight masters under the app's local data dir.
+1. **The Rust core** (`crates/photo-diary-core/`): `kamadak-exif` for EXIF (+ orientation correction), `image`'s `AvifEncoder` for full-res visually-lossless AVIF masters, pure-Rust `zenavif` only for rebuilding thumbnails from those internal masters, `walkdir` for scanning, `rusqlite` (SQLite, `user_version` migrations) for metadata, and `sha2` for folder dedup. Import is async with per-file error reporting; HEIC/HEIF/AVIF remain skipped as unsupported inputs. Imported photos are kept permanently as lightweight masters under the app's local data dir.
 2. **Raw DTOs, not port shapes.** The Rust commands return raw records (`PhotoDto`, `MonthRecordDto`, `DayCountDto`, notes, folders, stats) with `#[serde(rename_all = "camelCase")]`. **The `DayEntry` grouping, calendar grid, heatmap and highlights are assembled in TS** by `src/domain/build/*` — not on the Rust side. Only `Photo` maps ~1:1 from a DTO. The port is the contract; the builders are shared with the mock so both backends agree.
 3. **`TauriPhotoLibrary`** (`src/data/tauri/`): implements `PhotoLibrary` by `invoke`ing commands (`commands.ts` holds the typed wrappers + DTO types), mapping DTOs to `Photo` (thumbnails/masters via `convertFileSrc`), and running the `domain/build` functions.
 4. **Runtime selection.** `providers.tsx` picks `TauriPhotoLibrary` or `MockPhotoLibrary` via `isTauri` — **the UI is unchanged**.
 5. **Gates.** `mise.toml` pins Rust; the justfile has `app-*` / `check-rust`; the pre-push `rust-gate` and the CI `rust` matrix run `just check-rust`; `taplo` formats the Cargo TOML. Keep new Rust recipes/CI steps here.
 
-2b "day detail (virtual scrolling)" and 2c "multi-night events" remain partial: `DayDetailView` is a static mock kept unrouted, and `event` cards render only from mock fixtures (the Rust-fed `buildTimeline` doesn't emit `kind: 'event'` yet). When wiring them, follow the same style: extend the port, feed raw records through a `domain/build` function, and confine the UI to a feature slice.
+Day detail uses 120-photo cursor pages with fixed-row virtualization. Multi-night events are derived from bounded day records in `domain/build/timeline.ts`, while exact or unambiguous span metadata is persisted through the Rust core.

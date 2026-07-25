@@ -15,9 +15,14 @@ kamadak-exif = "0.6"
 # pulls ravif transitively). The `avif` feature is encode-only (no dav1d/`avif-native`), so
 # no NASM/system library is required = reproducibility first.
 image = { version = "0.25", features = ["avif"] }
+# Decode only the app's own AVIF masters while rebuilding the WebP cache. The default
+# zenavif decoder is safe, pure Rust and does not enable its assembly/C-FFI feature.
+# This does not make AVIF an accepted import format.
+zenavif = { version = "=0.1.6", default-features = false }
 rusqlite = { version = "0.40", features = ["bundled"] }
 serde = { version = "1", features = ["derive"] }
 sha2 = "0.11"
+reverse_geocoder = "=4.1.1"
 # `local-offset` lets us capture the machine's UTC offset at startup so mtime/now fallbacks
 # are formatted in local wall-clock time (matching EXIF), not UTC.
 time = { version = "0.3", features = ["local-offset"] }

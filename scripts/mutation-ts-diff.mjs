@@ -18,9 +18,13 @@ const base = process.argv[2] ?? 'origin/main'
 
 let changed
 try {
-  changed = execFileSync('git', ['diff', '--name-only', '--diff-filter=d', `${base}...HEAD`], {
+  const tracked = execFileSync('git', ['diff', '--name-only', '--diff-filter=d', base, '--'], {
     encoding: 'utf8',
   })
+  const untracked = execFileSync('git', ['ls-files', '--others', '--exclude-standard'], {
+    encoding: 'utf8',
+  })
+  changed = `${tracked}\n${untracked}`
 } catch (err) {
   console.error(`git diff against '${base}' failed: ${err.message}`)
   process.exit(1)
@@ -31,6 +35,7 @@ const files = changed
   .split('\n')
   .map((line) => line.trim())
   .filter((line) => /^src\/(domain|lib)\/.+\.ts$/.test(line) && !line.endsWith('.test.ts'))
+  .filter((line, index, all) => all.indexOf(line) === index)
 
 if (files.length === 0) {
   // Empty `--mutate` would fall back to mutating everything — early-exit instead.

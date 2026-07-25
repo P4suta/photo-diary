@@ -1,4 +1,5 @@
 import { open } from '@tauri-apps/plugin-dialog'
+import { useCallback } from 'react'
 import { isTauri } from './env'
 import { useImportFolder } from './queries'
 import { useUi } from './ui-store'
@@ -13,36 +14,39 @@ export function useAddPhotos() {
   const setImportState = useUi((s) => s.setImportState)
   const setImportProgress = useUi((s) => s.setImportProgress)
   const showToast = useUi((s) => s.showToast)
-  const importFolder = useImportFolder()
+  const { mutateAsync, isPending } = useImportFolder()
 
   /** Runs the import; resolves true if an import completed, false if cancelled/failed. */
-  const addPhotos = async (): Promise<boolean> => {
-    let path = ''
-    if (isTauri) {
-      const dir = await open({ directory: true, multiple: false })
-      if (typeof dir !== 'string') return false
-      path = dir
-    }
-    setImportProgress(null)
-    setImportState('panel')
-    try {
-      const result = await importFolder.mutateAsync({ path, onProgress: setImportProgress })
-      // A successful import can still leave per-file failures / undecodable files behind —
-      // surface them instead of closing the overlay as if everything went in.
-      const failed = result.failed.length + result.scanErrors.length
-      if (failed > 0 || result.skippedUnsupported > 0) {
-        showToast('import.completedWithIssues', { failed, skipped: result.skippedUnsupported })
+  const addPhotos = useCallback(
+    async (selectedPath?: string): Promise<boolean> => {
+      let path = selectedPath ?? ''
+      if (isTauri && !selectedPath) {
+        const dir = await open({ directory: true, multiple: false })
+        if (typeof dir !== 'string') return false
+        path = dir
       }
-      return true
-    } catch {
-      // A rejected import must reach the user, not become an unhandled promise rejection.
-      showToast('errors.importFailed')
-      return false
-    } finally {
-      setImportState('closed')
       setImportProgress(null)
-    }
-  }
+      setImportState('panel')
+      try {
+        const result = await mutateAsync({ path, onProgress: setImportProgress })
+        // A successful import can still leave per-file failures / undecodable files behind —
+        // surface them instead of closing the overlay as if everything went in.
+        const failed = result.failed.length + result.scanErrors.length
+        if (failed > 0 || result.skippedUnsupported > 0) {
+          showToast('import.completedWithIssues', { failed, skipped: result.skippedUnsupported })
+        }
+        return true
+      } catch {
+        // A rejected import must reach the user, not become an unhandled promise rejection.
+        showToast('errors.importFailed')
+        return false
+      } finally {
+        setImportState('closed')
+        setImportProgress(null)
+      }
+    },
+    [mutateAsync, setImportProgress, setImportState, showToast],
+  )
 
-  return { addPhotos, isPending: importFolder.isPending }
+  return { addPhotos, isPending }
 }

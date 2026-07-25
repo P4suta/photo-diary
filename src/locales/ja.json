@@ -20,11 +20,15 @@
   },
   "search": {
     "placeholder": "検索…",
+    "active": "{{from}}〜{{to}} · {{count}}か所",
     "close": "検索を閉じる",
     "periodHeading": "期間",
     "placeHeading": "場所",
     "clear": "クリア",
     "apply": "適用",
+    "from": "開始日",
+    "to": "終了日",
+    "noLocation": "場所情報なし",
     "period": {
       "today": "今日",
       "thisWeek": "今週",
@@ -45,13 +49,37 @@
     "open": "写真を開く",
     "note": "メモ",
     "star": "★を付ける",
-    "unstar": "★を外す"
+    "unstar": "★を外す",
+    "caption": "キャプション",
+    "captionPlaceholder": "1行キャプションを追加…"
   },
   "event": {
     "label": "イベント",
-    "noteSuffix": " · ノート"
+    "noteSuffix": " · ノート",
+    "title": "イベント名",
+    "note": "イベントノート",
+    "notePlaceholder": "イベント全体についてのノート…"
+  },
+  "dayDetail": {
+    "back": "タイムラインへ戻る",
+    "open": "日別詳細を開く",
+    "picksOnly": "★のみ",
+    "select": "選択",
+    "doneSelecting": "完了",
+    "selected": "{{count, number}}件を選択",
+    "starSelected": "選択へ★",
+    "unstarSelected": "★を外す",
+    "toggleSelection": "写真の選択を切り替える",
+    "loading": "写真をさらに読み込んでいます…",
+    "scrubber": "撮影時刻へ移動",
+    "size": {
+      "large": "大きいタイル",
+      "medium": "中タイル",
+      "small": "小さいタイル"
+    }
   },
   "lightbox": {
+    "dialog": "写真ビューアー",
     "close": "閉じる (Esc)",
     "prev": "前へ (←)",
     "next": "次へ (→)",
@@ -122,13 +150,17 @@
     "disconnected": "未接続",
     "lastScan": "最終スキャン {{time}}",
     "rescan": "再スキャン",
-    "remove": "削除"
+    "remove": "削除",
+    "removeConfirm": "{{path}} の監視を解除しますか？取り込み済みの写真は日記に残ります。",
+    "clearConfirm": "サムネイルキャッシュを消去しますか？フル解像度のマスターには影響しません。",
+    "regenerateConfirm": "すべてのサムネイルを今すぐ再生成しますか？"
   },
   "onboarding": {
     "title": "写真から、日記がはじまります",
     "body": "フォルダを追加すると、写真は撮影日ごとに並び、日記のライブラリへコピーして保管されます。フル解像度のまま軽量な AVIF に最適化されるので、<strong>原本はいっさい変更されず、取り込み後に削除しても写真はここに残ります。</strong>",
     "chooseFolder": "フォルダを選ぶ…",
-    "formats": "対応形式: JPEG · HEIC · PNG · WebP · AVIF",
+    "formats": "取り込み: JPEG · PNG · WebP · TIFF · BMP · GIF。HEIC/HEIF/AVIF は検出してスキップし、件数を報告します。",
+    "dropFolder": "またはフォルダをここへドロップ",
     "viewDemo": "→ デモのタイムラインを見る"
   },
   "import": {
@@ -137,6 +169,8 @@
     "importingCount": "{{count, number}}枚を取り込んでいます",
     "body": "フル解像度の AVIF に最適化しながら、日記のライブラリへコピーしています。原本は変更されません。",
     "continueBackground": "バックグラウンドで続行",
+    "pause": "このファイルの後で一時停止",
+    "resume": "再開",
     "completedWithIssues": "取り込み完了 · {{failed, number}}件を取り込めず、{{skipped, number}}件は非対応でスキップしました。"
   },
   "errors": {

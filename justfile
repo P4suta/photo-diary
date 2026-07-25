@@ -55,6 +55,11 @@ fmt:
 typos:
     typos
 
+# License/copyright metadata compliance (REUSE Specification 3.3).
+[group('daily')]
+reuse:
+    reuse lint
+
 # Vitest in watch mode — the fast inner loop for tests.
 [group('daily')]
 test-watch:
@@ -74,9 +79,8 @@ coverage:
 
 # End-to-end (Playwright, Vite dev + real browser). Heavy: `verify` / CI job / manual;
 # NOT part of `check` (keeps pre-push fast). First run locally needs the browser:
-# `pnpm exec playwright install chromium`. On Windows a vite dev server can linger on
-# 5173 after the run (reused next time, so faster). If it wedges, kill the process on
-# 5173 and re-run.
+# `pnpm exec playwright install chromium`. Playwright owns a fresh Vite process on
+# a dedicated strict port so it cannot reuse or interfere with `just dev`.
 [group('gates')]
 e2e:
     pnpm e2e
@@ -88,14 +92,14 @@ e2e:
 # `pnpm exec playwright install chromium`.
 [group('gates')]
 [doc('Full local acceptance: check + coverage + build + E2E (trust without CI)')]
-verify: typecheck lint typos coverage build e2e
+verify: typecheck lint typos reuse coverage build e2e
 
 # The full local gate, in one shot: typecheck + Biome + typos + tests (with coverage
 # thresholds on domain/lib). Mirrors CI — the pre-push hook and the CI check job both
 # run exactly this, so thresholds are enforced everywhere, not just report-only.
 [group('gates')]
-[doc('Full local gate: typecheck + Biome + typos + tests (coverage) — mirrors CI')]
-check: typecheck lint typos coverage
+[doc('Full local gate: typecheck + Biome + typos + REUSE + tests (coverage) — mirrors CI')]
+check: typecheck lint typos reuse coverage
 
 # Production build (tsc -b + vite build).
 [group('gates')]
@@ -110,7 +114,7 @@ build:
 clean:
     pnpm exec node -e "const fs=require('node:fs');for(const p of ['dist','node_modules/.vite'])fs.rmSync(p,{recursive:true,force:true})"
 
-# ── Desktop (Tauri v2 — phase 2) ──────────────────────────────────────────────
+# ── Desktop (Tauri v2) ────────────────────────────────────────────────────────
 
 # Run the Tauri desktop app in dev mode (Vite dev + native window).
 [group('desktop')]
@@ -136,6 +140,13 @@ app-lint:
 # Full Rust-side gate (same as CI).
 [group('desktop')]
 check-rust: app-test app-lint
+
+# Windows native acceptance against the real Tauri binary, SQLite and IPC.
+# The WDIO plugins, permissions and test data-dir override are Cargo-feature isolated.
+[group('desktop')]
+native-e2e:
+    pnpm tauri build --features native-e2e --config src-tauri/tauri.e2e.conf.json --no-bundle
+    pnpm native-e2e
 
 # ── Mutation testing (heavy; PR-diff gate, NOT part of check / pre-push) ───────
 

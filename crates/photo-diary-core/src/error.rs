@@ -12,6 +12,8 @@ pub enum Error {
     Db(#[from] rusqlite::Error),
     #[error("avif encode error: {0}")]
     Avif(String),
+    #[error("avif decode error: {0}")]
+    AvifDecode(String),
     #[error("{0}")]
     Other(String),
 }

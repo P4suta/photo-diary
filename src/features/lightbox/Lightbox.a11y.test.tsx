@@ -1,4 +1,4 @@
-import { act, screen } from '@testing-library/react'
+import { act, fireEvent, screen, waitFor } from '@testing-library/react'
 import { describe, expect, it, vi } from 'vitest'
 import { axe } from 'vitest-axe'
 import { useUi } from '@/app/ui-store'
@@ -47,8 +47,23 @@ describe('Lightbox a11y', () => {
     expect(await axe(container, opts)).toHaveNoViolations()
   })
 
-  // Known gaps (to drive future fixes); these do not fail the gate.
-  it.todo('give the modal role="dialog" / aria-modal')
-  it.todo('implement a focus trap (Tab stays within the viewer)')
-  it.todo('use aria-label instead of title on the nav buttons')
+  it('exposes modal semantics, labelled navigation and a focus trap', async () => {
+    const library = makeFakeLibrary({ listTimeline: vi.fn().mockResolvedValue([day]) })
+    renderWithProviders(<Lightbox />, { library })
+    act(() => useUi.getState().openLightbox(['a'], 0, 'July 5', 'timeline'))
+
+    const dialog = await screen.findByRole('dialog', { name: 'Photo viewer' })
+    expect(dialog).toHaveAttribute('aria-modal', 'true')
+    const close = screen.getByRole('button', { name: 'Close (Esc)' })
+    expect(screen.getByRole('button', { name: 'Previous (←)' })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Next (→)' })).toBeInTheDocument()
+    await waitFor(() => expect(close).toHaveFocus())
+
+    const exportButton = screen.getByRole('button', { name: 'Export this copy' })
+    exportButton.focus()
+    fireEvent.keyDown(dialog, { key: 'Tab' })
+    expect(close).toHaveFocus()
+    fireEvent.keyDown(dialog, { key: 'Tab', shiftKey: true })
+    expect(exportButton).toHaveFocus()
+  })
 })

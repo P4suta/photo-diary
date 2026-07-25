@@ -40,7 +40,7 @@ function photo(aspect: AspectRatio, over: Partial<Photo> = {}): Photo {
   }
 }
 
-const shibuya = { place: 'Shibuya, Tokyo', lat: 35.6595, lng: 139.7005 } as const
+const shibuya = { place: 'Shibuya', lat: 35.6595, lng: 139.7005 } as const
 
 /** Timeline: today (7/5) first, chronological descending. 1b states + 2a digest. */
 export const timeline: DayEntry[] = [

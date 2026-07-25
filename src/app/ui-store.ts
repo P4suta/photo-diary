@@ -2,7 +2,7 @@ import { create } from 'zustand'
 import type { ImportProgress } from '@/domain/models'
 
 /** Which query cache backs the open strip, so the lightbox resolves live photos from it. */
-export type LightboxSource = 'timeline' | 'highlights'
+export type LightboxSource = 'timeline' | 'highlights' | 'day'
 
 export interface LightboxState {
   /** Photo ids of the strip; the actual photos are resolved live from `source`'s cache. */
@@ -11,13 +11,20 @@ export interface LightboxState {
   /** Heading context (e.g. 'July 4') */
   context: string
   source: LightboxSource
+  date?: string
 }
 
 export type ImportState = 'closed' | 'panel' | 'toast'
 
 interface UiStore {
   lightbox: LightboxState | null
-  openLightbox: (ids: string[], index: number, context: string, source: LightboxSource) => void
+  openLightbox: (
+    ids: string[],
+    index: number,
+    context: string,
+    source: LightboxSource,
+    date?: string,
+  ) => void
   closeLightbox: () => void
   lightboxNext: () => void
   lightboxPrev: () => void
@@ -38,7 +45,8 @@ interface UiStore {
 
 export const useUi = create<UiStore>((set) => ({
   lightbox: null,
-  openLightbox: (ids, index, context, source) => set({ lightbox: { ids, index, context, source } }),
+  openLightbox: (ids, index, context, source, date) =>
+    set({ lightbox: { ids, index, context, source, date } }),
   closeLightbox: () => set({ lightbox: null }),
   lightboxNext: () =>
     set((s) =>

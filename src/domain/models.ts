@@ -1,6 +1,6 @@
 /**
  * Domain model — pure types with no dependency on React or the UI.
- * In phase 2 the Rust core (Tauri) returns JSON shaped to match these.
+ * The Rust core (Tauri) returns JSON shaped to match these contracts.
  *
  * Presentation (weekday / month-day strings, "N photos") is intentionally NOT
  * baked in here: dates stay raw and the UI formats them per locale (Intl).
@@ -148,4 +148,51 @@ export interface ImportProgress {
   current: number
   total: number
   filename: string
+}
+
+export interface TimelineFilter {
+  /** Inclusive `YYYY-MM-DD` bounds. */
+  startDate?: string
+  endDate?: string
+  /** OR semantics. `null` means photos without location data. */
+  places: (string | null)[]
+}
+
+export interface DaySummary {
+  date: string
+  place: string | null
+  photoCount: number
+  starredCount: number
+  note: string | null
+  /** Chapters aggregated across every photo in the day, independent of lazy photo pages. */
+  clusters: TimeCluster[]
+}
+
+export interface DayPhotosPage {
+  photos: Photo[]
+  nextCursor: string | null
+}
+
+export interface EventMetadata {
+  id: string
+  startDate: string
+  endDate: string
+  title: string
+  note: string | null
+}
+
+export interface ThumbnailCacheResult {
+  regenerated: number
+  failed: ImportFailure[]
+}
+
+export interface LibraryEvent {
+  kind: 'changed' | 'place-progress'
+  current?: number
+  total?: number
+}
+
+export interface JobState {
+  running: boolean
+  paused: boolean
 }

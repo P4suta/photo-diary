@@ -1,5 +1,12 @@
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import type { DayEntry, HighlightsData, ImportProgress } from '@/domain/models'
+import { useInfiniteQuery, useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
+import { useEffect } from 'react'
+import type {
+  DayEntry,
+  EventMetadata,
+  HighlightsData,
+  ImportProgress,
+  TimelineFilter,
+} from '@/domain/models'
 import { flipStarInHighlights, flipStarInTimeline } from '@/domain/star'
 import { useLibrary } from './library-context'
 import { useToday } from './today'
@@ -12,13 +19,18 @@ export const qk = {
   stats: ['stats'] as const,
   folders: ['folders'] as const,
   placeFacets: ['placeFacets'] as const,
+  daySummary: ['daySummary'] as const,
+  dayPhotos: ['dayPhotos'] as const,
 }
 
-export function useTimeline() {
+export function useTimeline(filter?: TimelineFilter) {
   const library = useLibrary()
   const today = useToday()
   // `today` in the key rolls the query over at midnight (staleTime is Infinity).
-  return useQuery({ queryKey: [...qk.timeline, today], queryFn: () => library.listTimeline() })
+  return useQuery({
+    queryKey: [...qk.timeline, today, filter ?? null],
+    queryFn: () => library.listTimeline(filter),
+  })
 }
 
 export function useCalendarMonth(year: number, month: number) {
@@ -56,9 +68,33 @@ export function useFolders() {
   return useQuery({ queryKey: qk.folders, queryFn: () => library.listFolders() })
 }
 
-export function usePlaceFacets() {
+export function usePlaceFacets(filter?: TimelineFilter) {
   const library = useLibrary()
-  return useQuery({ queryKey: qk.placeFacets, queryFn: () => library.listPlaceFacets() })
+  return useQuery({
+    queryKey: [...qk.placeFacets, filter?.startDate ?? null, filter?.endDate ?? null],
+    queryFn: () => library.listPlaceFacets(filter),
+  })
+}
+
+export function useDaySummary(date: string) {
+  const library = useLibrary()
+  return useQuery({
+    queryKey: [...qk.daySummary, date],
+    queryFn: () => library.getDaySummary(date),
+    enabled: date.length === 10,
+  })
+}
+
+export function useDayPhotos(date: string, starredOnly: boolean) {
+  const library = useLibrary()
+  return useInfiniteQuery({
+    queryKey: [...qk.dayPhotos, date, starredOnly],
+    initialPageParam: null as string | null,
+    queryFn: ({ pageParam }) =>
+      library.getDayPhotos({ date, cursor: pageParam, limit: 120, starredOnly }),
+    getNextPageParam: (last) => last.nextCursor ?? undefined,
+    enabled: date.length === 10,
+  })
 }
 
 export function useImportFolder() {
@@ -122,4 +158,87 @@ export function useToggleStar() {
       qc.invalidateQueries({ queryKey: qk.stats })
     },
   })
+}
+
+export function useSaveCaption() {
+  const library = useLibrary()
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: ({ photoId, caption }: { photoId: string; caption: string }) =>
+      library.saveCaption(photoId, caption),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: qk.timeline })
+      qc.invalidateQueries({ queryKey: qk.highlights })
+      qc.invalidateQueries({ queryKey: qk.dayPhotos })
+    },
+  })
+}
+
+export function useSetStarred() {
+  const library = useLibrary()
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: ({ photoIds, starred }: { photoIds: string[]; starred: boolean }) =>
+      library.setStarred(photoIds, starred),
+    onSuccess: () => qc.invalidateQueries(),
+  })
+}
+
+export function useSaveEventMetadata() {
+  const library = useLibrary()
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: (event: EventMetadata) => library.saveEventMetadata(event),
+    onSuccess: () => qc.invalidateQueries({ queryKey: qk.timeline }),
+  })
+}
+
+export function useLibraryActions() {
+  const library = useLibrary()
+  const qc = useQueryClient()
+  const invalidate = () => qc.invalidateQueries()
+  return {
+    rescan: useMutation({
+      mutationFn: (folderId: string) => library.rescanFolder(folderId),
+      onSuccess: invalidate,
+    }),
+    remove: useMutation({
+      mutationFn: (folderId: string) => library.removeFolder(folderId),
+      onSuccess: invalidate,
+    }),
+    clearCache: useMutation({
+      mutationFn: () => library.clearThumbnailCache(),
+      onSuccess: invalidate,
+    }),
+    regenerateCache: useMutation({
+      mutationFn: () => library.regenerateThumbnailCache(),
+      onSuccess: invalidate,
+    }),
+    openLibrary: useMutation({ mutationFn: () => library.openLibrary() }),
+  }
+}
+
+export function useLibraryEvents() {
+  const library = useLibrary()
+  const qc = useQueryClient()
+  useEffect(() => {
+    let active = true
+    let unsubscribe: (() => void) | undefined
+    void library
+      .subscribeLibraryEvents((event) => {
+        if (event.kind === 'changed') void qc.invalidateQueries()
+        if (event.kind === 'place-progress' && event.current === event.total) {
+          void qc.invalidateQueries({ queryKey: qk.timeline })
+          void qc.invalidateQueries({ queryKey: qk.placeFacets })
+        }
+      })
+      .then((stop) => {
+        if (active) unsubscribe = stop
+        else stop()
+      })
+    return () => {
+      active = false
+      unsubscribe?.()
+    }
+  }, [library, qc])
 }

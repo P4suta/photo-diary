@@ -1,6 +1,11 @@
 import { describe, expect, it } from 'vitest'
-import { DIGEST_THRESHOLD, groupTimeline } from '@/domain/build/timeline'
-import type { Photo } from '@/domain/models'
+import {
+  buildTimelineFromDays,
+  DIGEST_THRESHOLD,
+  groupTimeline,
+  type TimelineDayRecord,
+} from '@/domain/build/timeline'
+import type { EventMetadata, Photo } from '@/domain/models'
 
 /** Test factory building a Photo from the minimal fields. */
 function photo(over: Partial<Photo> & { id: string; takenAt: string }): Photo {
@@ -127,8 +132,8 @@ describe('groupTimeline', () => {
     expect(entry.note).toBe('took a lot')
   })
 
-  it('digest clusters split on a capture gap over one hour (time=first HH:MM, label=place, count)', () => {
-    // 33 photos: 09:00–09:29 (30, contiguous) → 12:00 gap > 1h → 12:00–12:02 (3)
+  it('digest clusters split on a capture gap of at least 90 minutes', () => {
+    // 33 photos: 09:00–09:29 (30, contiguous) → 12:00 gap > 90m → 12:00–12:02 (3)
     const morning: Photo[] = []
     for (let i = 0; i < 30; i++) {
       const mm = String(i).padStart(2, '0')
@@ -176,5 +181,120 @@ describe('groupTimeline', () => {
     ]
     groupTimeline(photos, [], '2026-07-05')
     expect(photos.map((p) => p.id)).toEqual(['b', 'a'])
+  })
+})
+
+describe('multi-night events', () => {
+  const highVolumeDays: TimelineDayRecord[] = [
+    { date: '2026-07-05', place: 'Nara, JP', photoCount: 220, note: null, photos: [] },
+    { date: '2026-07-06', place: 'Nara, JP', photoCount: 240, note: 'day two', photos: [] },
+    { date: '2026-07-07', place: 'Kyoto, JP', photoCount: 200, note: null, photos: [] },
+  ]
+
+  const eventFrom = (overrides: EventMetadata[]) =>
+    buildTimelineFromDays(highVolumeDays, overrides, '2026-07-25').find(
+      (entry) => entry.kind === 'event',
+    )
+
+  it('folds consecutive 200+ photo days and uses the weighted primary place', () => {
+    const event = eventFrom([])
+    expect(event).toMatchObject({
+      kind: 'event',
+      start: '2026-07-05',
+      end: '2026-07-07',
+      title: 'Nara, JP',
+      photoCount: 660,
+    })
+  })
+
+  it('prefers an exact override and inherits one unambiguous extended span', () => {
+    const exact: EventMetadata = {
+      id: 'exact',
+      startDate: '2026-07-05',
+      endDate: '2026-07-07',
+      title: 'Summer trip',
+      note: 'exact note',
+    }
+    expect(eventFrom([exact])).toMatchObject({ title: 'Summer trip', note: 'exact note' })
+
+    const oldSpan: EventMetadata = {
+      id: 'old',
+      startDate: '2026-07-05',
+      endDate: '2026-07-06',
+      title: 'Extended trip',
+      note: null,
+    }
+    expect(eventFrom([oldSpan])).toMatchObject({ title: 'Extended trip' })
+  })
+
+  it('does not duplicate metadata when split/merge overlap is ambiguous', () => {
+    const overlaps: EventMetadata[] = [
+      {
+        id: 'left',
+        startDate: '2026-07-04',
+        endDate: '2026-07-05',
+        title: 'Left',
+        note: null,
+      },
+      {
+        id: 'right',
+        startDate: '2026-07-07',
+        endDate: '2026-07-08',
+        title: 'Right',
+        note: null,
+      },
+    ]
+    expect(eventFrom(overlaps)).toMatchObject({ title: 'Nara, JP', note: null })
+  })
+
+  it('handles bounded non-event records and deterministic photo ordering', () => {
+    const sameTime = '2026-07-09T10:00:00'
+    const entries = buildTimelineFromDays(
+      [
+        { date: '2026-07-10', place: null, photoCount: 0, note: null, photos: [] },
+        { date: '2026-07-09', place: null, photoCount: 0, note: 'note', photos: [] },
+        {
+          date: '2026-07-08',
+          place: null,
+          photoCount: 2,
+          note: null,
+          photos: [photo({ id: 'b', takenAt: sameTime }), photo({ id: 'a', takenAt: sameTime })],
+        },
+        {
+          date: '2026-07-07',
+          place: 'Kyoto, JP',
+          photoCount: DIGEST_THRESHOLD + 1,
+          note: null,
+          photos: burst('2026-07-07', DIGEST_THRESHOLD + 1),
+        },
+      ],
+      [],
+      '2026-07-09',
+    )
+    expect(entries.find((entry) => entry.date === '2026-07-10')).toBeUndefined()
+    expect(entries.find((entry) => entry.date === '2026-07-09')).toMatchObject({
+      kind: 'note_only',
+      today: true,
+    })
+    const photos = entries.find((entry) => entry.date === '2026-07-08')
+    expect(photos?.kind).toBe('photos')
+    if (photos?.kind !== 'photos') throw new Error('unreachable')
+    expect(photos.photos.map((item) => item.id)).toEqual(['a', 'b'])
+    expect(entries.find((entry) => entry.date === '2026-07-07')?.kind).toBe('digest')
+  })
+
+  it('separates non-consecutive event runs and falls back to a date-range title', () => {
+    const records: TimelineDayRecord[] = [
+      { date: '2026-07-01', place: null, photoCount: 200, note: null, photos: [] },
+      { date: '2026-07-02', place: null, photoCount: 200, note: null, photos: [] },
+      { date: '2026-07-05', place: null, photoCount: 200, note: null, photos: [] },
+      { date: '2026-07-06', place: null, photoCount: 200, note: null, photos: [] },
+    ]
+    const events = buildTimelineFromDays(records, [], '2026-07-06').filter(
+      (entry) => entry.kind === 'event',
+    )
+    expect(events).toHaveLength(2)
+    expect(events[0]).toMatchObject({ title: '2026-07-05 – 2026-07-06', today: true })
+    expect(events[1]).toMatchObject({ title: '2026-07-01 – 2026-07-02', today: false })
   })
 })

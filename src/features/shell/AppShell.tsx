@@ -1,10 +1,11 @@
 import { Navigate, Outlet } from 'react-router-dom'
-import { useFolders } from '@/app/queries'
+import { useFolders, useLibraryEvents } from '@/app/queries'
 import { Sidebar } from './Sidebar'
 import { Toast } from './Toast'
 import { TopBar } from './TopBar'
 
 export function AppShell() {
+  useLibraryEvents()
   // First run: a library with no watched folder has nothing to show, so send it to
   // onboarding. While folders are still loading (undefined) render the shell as usual.
   const { data: folders } = useFolders()

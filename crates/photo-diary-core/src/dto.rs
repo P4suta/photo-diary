@@ -3,7 +3,7 @@
 //! functions on the TS side (`src/domain/build`). Here we only convert DB -> plain shapes.
 
 use crate::model::PhotoRow;
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 use std::path::Path;
 
 #[derive(Debug, Clone, Serialize)]
@@ -134,6 +134,76 @@ pub struct StatsDto {
     pub thumbnail_cache_bytes: i64,
     pub location: String,
     pub last_import: String,
+}
+
+/// Inclusive date range plus an OR-list of places. A `null` item means photos whose
+/// place is NULL. Place predicates are combined with the date range using AND.
+#[derive(Debug, Clone, Default, Deserialize, Serialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub struct TimelineFilterDto {
+    pub start_date: Option<String>,
+    pub end_date: Option<String>,
+    #[serde(default)]
+    pub places: Vec<Option<String>>,
+}
+
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct TimelineDayDto {
+    pub date: String,
+    pub place: Option<String>,
+    pub photo_count: i64,
+    pub note: Option<String>,
+    /// All photos for ordinary days (<= 30), or at most four representatives for a digest day.
+    pub photos: Vec<PhotoDto>,
+}
+
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct DaySummaryDto {
+    pub date: String,
+    pub place: Option<String>,
+    pub photo_count: i64,
+    pub starred_count: i64,
+    pub note: Option<String>,
+    pub clusters: Vec<DayClusterDto>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct DayClusterDto {
+    pub time: String,
+    pub label: String,
+    pub count: i64,
+}
+
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct DayPhotosPageDto {
+    pub photos: Vec<PhotoDto>,
+    pub next_cursor: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct EventOverrideDto {
+    pub id: String,
+    pub start_date: String,
+    pub end_date: String,
+    pub title: String,
+    pub note: Option<String>,
+}
+
+impl From<crate::model::EventOverride> for EventOverrideDto {
+    fn from(value: crate::model::EventOverride) -> Self {
+        Self {
+            id: value.id,
+            start_date: value.start_date,
+            end_date: value.end_date,
+            title: value.title,
+            note: value.note,
+        }
+    }
 }
 
 #[cfg(test)]

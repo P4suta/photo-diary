@@ -26,7 +26,7 @@ Dependencies always point inward (domain ← data ← features; app / lib / ui c
 │ src/data/mock/            │        │ src/data/tauri/           │
 │  MockPhotoLibrary         │ chosen │  TauriPhotoLibrary        │
 │  fixtures.ts              │ ⇄ at   │  @tauri-apps/api invoke   │
-│  (browser dev)            │ runtime│  → Rust core (Phase 2)    │
+│  (browser dev)            │ runtime│  → Rust core + SQLite      │
 └────────┬──────────────────┘        └──────────┬───────────────┘
          │ implements                           │ implements
 ┌────────▼─────────────────────────────────────▼───────────────┐
@@ -55,7 +55,7 @@ Inner layers never import outer layers. `src/domain` depends on neither React no
 - **`src/data/mock/`** — The `PhotoLibrary` implementation used in browser dev.
   - `MockPhotoLibrary.ts` — An in-memory `implements PhotoLibrary` that feeds fixture records through the same `domain/build` functions.
   - `fixtures.ts` — Fixed data such as `timeline` / `highlights` / `stats` / `folders` / `placeFacets` / `julyRecords`.
-- **`src/data/tauri/`** — The real backend (Phase 2).
+- **`src/data/tauri/`** — The real backend.
   - `TauriPhotoLibrary.ts` — `implements PhotoLibrary` by calling `invoke`, mapping DTOs to `Photo`, and running the `domain/build` functions on the raw records.
   - `commands.ts` — Typed `invoke` wrappers + the DTO types (`PhotoDto` / `MonthRecordDto` / `DayCountDto` / …) matching the Rust core's `#[serde(rename_all = "camelCase")]` output.
 - **`src/app/`** — App assembly. Depends on React but not on any specific feature screen.
@@ -79,17 +79,21 @@ The only face between UI and backend is `PhotoLibrary` in `src/domain/ports.ts`.
 
 ```ts
 export interface PhotoLibrary {
-  listTimeline(): Promise<DayEntry[]>              // reverse chronological, today first
-  getMonth(year: number, month: number): Promise<MonthCell[]>  // calendar grid (1-based month)
-  getHeatmap(year: number): Promise<HeatWeek[]>    // yearly heatmap for a year
-  getHighlights(): Promise<HighlightsData>         // ★ highlights
-  getStats(): Promise<LibraryStats>                // library stats
-  listFolders(): Promise<WatchedFolder[]>          // watched-folder list
-  listPlaceFacets(): Promise<PlaceFacet[]>         // place facets for search
-  // mutations
+  listTimeline(filter?: TimelineFilter): Promise<DayEntry[]>
+  getDaySummary(date: string): Promise<DaySummary>
+  getDayPhotos(input: DayPhotosInput): Promise<DayPhotosPage>
+  listPlaceFacets(filter?: TimelineFilter): Promise<PlaceFacet[]>
   importFolder(path: string, onProgress?: (p: ImportProgress) => void): Promise<ImportResult>
-  saveNote(date: string, note: string): Promise<void> // save (or, on empty, delete) a day's note
-  toggleStar(photoId: string): Promise<void>          // toggle a photo's ★
+  saveCaption(photoId: string, caption: string): Promise<void>
+  setStarred(photoIds: string[], starred: boolean): Promise<void>
+  saveEventMetadata(event: EventMetadata): Promise<void>
+  rescanFolder(folderId: string): Promise<ImportResult>
+  removeFolder(folderId: string): Promise<void>
+  clearThumbnailCache(): Promise<number>
+  regenerateThumbnailCache(): Promise<ThumbnailCacheResult>
+  exportPhoto(photoId: string, destination: string): Promise<number>
+  subscribeLibraryEvents(listener: (event: LibraryEvent) => void): Promise<() => void>
+  // calendar, heatmap, highlights, notes, stats and job controls are on the same port
 }
 ```
 
@@ -155,7 +159,7 @@ export type DayKind = DayEntry['kind']
 
 - The shared `DayCommon` holds `date` (`'YYYY-MM-DD'`) / `place` / `today`. Presentation (weekday, month-day, "N photos") is deliberately kept out of the domain — dates stay raw and the UI formats them per locale via `Intl` (`src/lib/datetime.ts`), so locale never crosses the `PhotoLibrary` port.
 - `photos` = a normal day with photos, `note_only` = a note only with no photos, `empty` = no record, `digest` = the "digest" for a heavy-shooting day (holds EXIF-clustered `TimeCluster[]`), `event` = a multi-night trip spanning several days. **Five variants.**
-- `event` currently renders only from mock fixtures (`EventCard`); the Rust-fed `buildTimeline` does not yet emit `kind: 'event'` (2c has no backend grouping). The variant and card exist so the switch stays exhaustive.
+- `event` is derived from consecutive days with at least 200 photos per day. Exact persisted spans win; a single overlapping override can be inherited after a span extension, while ambiguous split/merge overlaps are ignored.
 - Branching on `kind` lets each card handle only the fields it needs, type-safely (`strict` + `noFallthroughCasesInSwitch` catch a missed variant). It's guaranteed by the type that `empty` has neither a note nor photos.
 
 ## The single source of truth for design tokens
@@ -167,12 +171,12 @@ The truth for colors and themes is consolidated in one place: the CSS variables 
 - **Applying the theme**: `apply()` in `src/app/theme.ts` merely toggles the `.dark` class and the `data-accent` attribute on `<html>`, and the CSS side switches the values. `mode: 'system'` follows the OS `prefers-color-scheme`.
 - **Reference table**: `tokenRows` in `src/domain/tokens.ts` is a table for the tokens screen (the token-list panel), and its values are kept in sync with the CSS variables in `index.css`. It's a copy for display; the truth is on the `index.css` side.
 
-## The Phase 1 / Phase 2 boundary
+## Runtime boundary
 
-- **Phase 1 — implemented**: A Vite + React + TypeScript + Tailwind frontend. In browser dev the data is mocked (`MockPhotoLibrary` + `fixtures.ts`, keyed around a July 2026 fixture set).
-- **Phase 2 — implemented**: A Tauri v2 shell + a Rust core (`crates/photo-diary-core`): EXIF via kamadak-exif, orientation correction, full-res visually-lossless AVIF via `image`'s AvifEncoder, folder scan via walkdir, SQLite (rusqlite) with `user_version` migrations, SHA-256 dedup, an async import pipeline with per-file error reporting, and a read-query layer returning raw DTOs. `TauriPhotoLibrary` (`src/data/tauri/`) implements the same `PhotoLibrary`; `providers.tsx` selects it at runtime inside the Tauri window. The UI is unchanged.
-  - The Rust side returns **raw records** (`PhotoDto`, `MonthRecordDto`, `DayCountDto`, notes, …); day grouping, digest clustering, the calendar grid, the heatmap and highlights are assembled in TS (`src/domain/build/*`), shared with the mock.
-  - Day detail (virtual scrolling, 2b) and multi-night events (2c) are within Phase 2's scope but only partly built: `DayDetailView` is a static mock kept unrouted, and `event` cards render only from fixtures (no backend event grouping yet).
+- Browser development uses `MockPhotoLibrary`; the Windows desktop app uses `TauriPhotoLibrary`. `providers.tsx` selects once at runtime.
+- The Rust core owns import, EXIF/orientation, AVIF masters, pure-Rust internal AVIF decoding, SQLite v2, offline GeoNames place resolution, stable cursor queries, watched-folder jobs, cache operations and byte-identical export.
+- Rust returns bounded raw records. TypeScript builders assemble day cards, 90-minute/location clusters, calendar/heatmap views and multi-night events for both adapters.
+- `/day/:date` consumes 120-photo cursor pages and virtualizes fixed rows; the timeline never loads the complete library.
 
 Because the boundary is closed within a single interface (`PhotoLibrary`), both backends plug in behind the same port and `src/features` / most of `src/domain` are used as-is.
 
@@ -199,7 +203,7 @@ src/
 │  ├─ mock/                PhotoLibrary for browser dev
 │  │  ├─ MockPhotoLibrary.ts  implements PhotoLibrary (in-memory, via build/)
 │  │  └─ fixtures.ts          timeline / highlights / stats / folders / placeFacets / julyRecords
-│  └─ tauri/               the real backend (Phase 2)
+│  └─ tauri/               the real Tauri/SQLite backend
 │     ├─ TauriPhotoLibrary.ts implements PhotoLibrary over invoke (+ build/)
 │     └─ commands.ts          typed invoke wrappers + DTO types (camelCase)
 ├─ app/                    app assembly
@@ -217,7 +221,7 @@ src/
 ├─ features/               UI + hooks encapsulated per feature
 │  ├─ shell/               AppShell / SearchBar / Sidebar / TopBar / Toast
 │  ├─ timeline/            TimelineView / DayCard / DayHeader / DigestCard / EventCard
-│  │                       NoteEditor / DayDetailView (2b, unrouted mock)
+│  │                       NoteEditor / DayDetailView / event metadata
 │  ├─ calendar/            CalendarView / MonthGrid / YearHeatmap / heat.ts
 │  ├─ highlights/          HighlightsView
 │  ├─ lightbox/            Lightbox
@@ -233,22 +237,23 @@ src/
 crates/photo-diary-core/   Rust core: scan / exif / orient / transcode / thumbnail
                            db (SQLite + migrations) / views (read queries) / dto / library
 src-tauri/                 Tauri v2 shell: IPC commands → photo-diary-core, tauri.conf.json (CSP)
-e2e/                       Playwright smoke spec + global-setup
+e2e/                       Playwright browser acceptance specs
+native-e2e/                Tauri-recommended WebdriverIO real-app acceptance + restart proof
 ```
 
 ## Routing
 
-`src/app/router.tsx` (react-router) has `AppShell` as the parent, with `/` (TimelineView) / `/calendar` / `/highlights` / `/settings` / `/tokens` as child routes. The onboarding `/welcome` (EmptyState), shown when no folder is registered, sits on its own outside the shell. The 2b day-detail screen (`DayDetailView`) is intentionally **not** routed — it's still a static mock and stays unreachable until it's wired from real data as `/day/:date`.
+`src/app/router.tsx` has `AppShell` as the parent, with `/`, `/day/:date`, `/calendar`, `/highlights`, `/settings`, and `/tokens` as child routes. `/welcome` sits outside the shell and accepts a picked or Tauri-dropped directory.
 
 ## Build and quality gates
 
 For reproducibility, local and CI pass through the same recipe (`just check`). The package manager is pnpm (npm is not used), and the toolchain is pinned by `mise.toml`.
 
 - **Setup**: after `just setup`, run `just dev` (http://localhost:5173).
-- **justfile recipes**: `setup` / `doctor` / `dev` / `typecheck` / `lint` / `fmt` / `typos` / `test` / `coverage` / `check` (= typecheck + lint + typos + coverage) / `e2e` / `verify` (= check + build + e2e) / `build` / `clean`. Desktop (Phase 2): `app-dev` / `app-build` / `app-test` / `app-lint` / `check-rust` (= app-test + app-lint).
+- **justfile recipes**: `check` includes typecheck, Biome, typos, REUSE 3.3 and coverage; `verify` adds production build and Playwright. Desktop recipes are `app-dev`, `app-build`, `check-rust`, and Windows `native-e2e`.
 - **pnpm scripts**: `dev` / `build` / `preview` / `typecheck` / `test` / `coverage` / `e2e` / `tauri`.
-- **Toolchain (`mise.toml`, all exact-pinned)**: node 24.18.0, pnpm 10.34.4, biome 2.5.0, rust 1.96.0 (with `clippy` + `rustfmt` components), just 1.54.0, lefthook 2.1.9, crate-ci/typos 1.47.2, committed 1.1.11, taplo-cli 0.10.0. cargo-backend tools are binstalled. Rust for the Phase 2 core/shell is provisioned by mise too.
+- **Toolchain (`mise.toml`, all exact-pinned)**: node 24.18.0, pnpm 10.34.4, biome 2.5.0, rust 1.96.0, just 1.54.0, lefthook 2.1.9, typos 1.47.2, committed 1.1.11, taplo-cli 0.10.0, and REUSE 6.2.0.
 - **Git gates (lefthook)**: commit-msg = committed (Conventional Commits) / pre-commit = biome (staged) + typos + `taplo fmt --check` / pre-push = `just check`, plus `just check-rust` when the push includes Rust files (`*.rs` / `Cargo.*`).
-- **CI (`.github/workflows/ci.yml`)** — four jobs: `check` (jdx/mise-action → `pnpm install --frozen-lockfile` → `just check` → `just build`, pnpm-store cached), `e2e` (installs the Playwright browser, runs `just e2e`), `rust` (Linux + Windows matrix; installs Tauri's Linux system deps, caches cargo, runs `just check-rust`), and `mutation` (PR-only diff mutation testing). Pre-push and CI run the same recipes.
+- **CI (`.github/workflows/ci.yml`)** — `check`, Playwright `e2e`, Linux/Windows `rust`, Windows `native-e2e`, and PR-only `mutation`. Native artifacts retain logs plus 1180×820/900×600 en/ja light/dark screenshots.
 
 The design source (the Claude Design handoff `_handoff/`) and the internal memo `CLAUDE.md` are gitignored and reference-only.

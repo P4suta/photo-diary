@@ -23,7 +23,7 @@ mutants.out/
 mutants.out.old/
 mutants-in-diff.patch
 
-# Rust / Cargo (photo-diary-core crate, and the Tauri shell in phase 2)
+# Rust / Cargo (photo-diary-core crate and the Tauri shell)
 target/
 # Tauri generated bundle output
 src-tauri/gen/
@@ -36,6 +36,7 @@ src-tauri/gen/
 
 # Logs
 *-debug.log*
+logs/
 
 # Local-only mise tool overrides
 mise.local.toml
