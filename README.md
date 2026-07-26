@@ -57,7 +57,7 @@ More detail: [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) and [`docs/DEVELOPME
 
 ## Stack
 
-- **Frontend** — Vite + React 19 + TypeScript (strict) + Tailwind + TanStack Query + Zustand + react-router + i18next (en/ja).
+- **Frontend** — Vite + React 19 + TypeScript (strict) + Tailwind CSS 4 (CSS-first, official Vite plugin) + TanStack Query + Zustand + react-router + i18next (en/ja).
 - **Desktop** — Tauri v2 shell + a Rust core: walkdir scan, kamadak-exif, `image`/AVIF transcode, rusqlite, sha2 for dedup.
 
 ## Status

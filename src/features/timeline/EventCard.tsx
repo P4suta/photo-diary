@@ -50,7 +50,7 @@ export function EventCard({ day }: { day: EventEntry }) {
                 event.currentTarget.blur()
               }
             }}
-            className="min-w-0 flex-1 bg-transparent text-[17px] font-semibold border-b border-dashed border-input outline-none"
+            className="min-w-0 flex-1 bg-transparent text-[17px] font-semibold border-b border-dashed border-input outline-hidden"
           />
           <span className="ml-auto font-mono text-[11px] text-[color:var(--moss)]">
             {t('unit.photo', { count: day.photoCount })}
@@ -100,7 +100,7 @@ export function EventCard({ day }: { day: EventEntry }) {
                 event.currentTarget.blur()
               }
             }}
-            className="w-full resize-none bg-transparent text-[13px] leading-5 outline-none placeholder:text-muted-foreground/50"
+            className="w-full resize-none bg-transparent text-[13px] leading-5 outline-hidden placeholder:text-muted-foreground/50"
           />
         </div>
       </div>

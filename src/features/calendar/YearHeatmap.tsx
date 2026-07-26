@@ -89,7 +89,7 @@ export function YearHeatmap({ year }: { year: number }) {
                         aria-label={label}
                         title={label}
                         className={cn(
-                          'block w-[15px] h-[15px] rounded-[3px] border-0 p-0 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[color:var(--ring)]',
+                          'block w-[15px] h-[15px] rounded-[3px] border-0 p-0 focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-[color:var(--ring)]',
                           heatClass(c.level),
                         )}
                       />
