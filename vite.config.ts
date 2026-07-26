@@ -1,4 +1,5 @@
 import { fileURLToPath, URL } from 'node:url'
+import tailwindcss from '@tailwindcss/vite'
 import react from '@vitejs/plugin-react'
 import type { Plugin } from 'vite'
 // vitest/config extends vite's defineConfig so the `test` field is typed.
@@ -23,7 +24,7 @@ function nativeE2eEntry(mode: string): Plugin {
 
 // https://vite.dev/config/
 export default defineConfig(({ mode }) => ({
-  plugins: [nativeE2eEntry(mode), react()],
+  plugins: [nativeE2eEntry(mode), tailwindcss(), react()],
   resolve: {
     alias: {
       '@': fileURLToPath(new URL('./src', import.meta.url)),

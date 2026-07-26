@@ -33,7 +33,7 @@ export function NoteEditor({ date, note }: { date: string; note: string | null }
         }}
         rows={2}
         placeholder={t('day.notePlaceholder')}
-        className="w-full resize-none bg-transparent text-[15px] leading-7 outline-none placeholder:text-muted-foreground/50"
+        className="w-full resize-none bg-transparent text-[15px] leading-7 outline-hidden placeholder:text-muted-foreground/50"
       />
     )
   }
