@@ -1,4 +1,4 @@
-import { expect, test } from '@playwright/test'
+import { expect, test } from './fixtures'
 
 // End-to-end pass over the core experience: capture date → day → photos in order →
 // note → review. Browser E2E uses MockPhotoLibrary, so content is deterministic.
