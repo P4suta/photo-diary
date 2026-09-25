@@ -47,6 +47,28 @@ async function invoke<T>(command: string, args: Record<string, unknown> = {}): P
   }) as Promise<T>
 }
 
+/**
+ * Steps the calendar from the month it opens on to the month holding `date` ('YYYY-MM-DD').
+ * The calendar opens on the real current month, while the seeded photos carry fixed dates, so the distance between the two grows with the day the suite runs.
+ * The app shares this machine's clock and time zone, so the runner's `new Date()` names the month the calendar opened on.
+ */
+async function showCalendarMonth(date: string): Promise<void> {
+  const [year, month] = date.split('-').map(Number)
+  const now = new Date()
+  const steps = year * 12 + (month - 1) - (now.getFullYear() * 12 + now.getMonth())
+  const stepButton = await browser.$(
+    `button[aria-label="${steps < 0 ? 'Previous month' : 'Next month'}"]`,
+  )
+  await stepButton.waitForExist()
+  for (let step = 0; step < Math.abs(steps); step++) {
+    await stepButton.click()
+  }
+  const label = new Intl.DateTimeFormat('en', { year: 'numeric', month: 'long' }).format(
+    new Date(year, month - 1, 1),
+  )
+  await (await browser.$(`h2=${label}`)).waitForExist()
+}
+
 describe('photo-diary native restart', () => {
   it('restores SQLite state in a new app process and unregisters watching without deleting photos', async () => {
     const state = JSON.parse(readFileSync(nativeStatePath, 'utf8')) as RestartState
@@ -85,9 +107,12 @@ describe('photo-diary native restart', () => {
 
     const calendarLink = await browser.$('a[href="/calendar"]')
     await calendarLink.click()
-    const eventBands = await browser.$$(
-      '[data-testid="calendar-event-band"][aria-label="Event: Native multi-night event"]',
-    )
+    await showCalendarMonth(state.eventStart)
+    const eventBandSelector =
+      '[data-testid="calendar-event-band"][aria-label="Event: Native multi-night event"]'
+    // The month's rows arrive over IPC after the header has switched.
+    await (await browser.$(eventBandSelector)).waitForExist()
+    const eventBands = await browser.$$(eventBandSelector)
     expect(eventBands).toHaveLength(2)
 
     const folders = await invoke<FolderDto[]>('list_folders')
