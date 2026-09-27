@@ -17,12 +17,12 @@ jobs:
   check:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
 
       # Provisions the exact toolchain pinned in mise.toml (node, pnpm, biome,
       # just, typos, …) — the same versions developers get locally.
       - name: Install toolchain (mise)
-        uses: jdx/mise-action@v4
+        uses: jdx/mise-action@c2a87611a18de5b3828c5652fe268e992400cb5c # v4
 
       # Cache the pnpm content-addressed store keyed on the lockfile, so unchanged
       # deps are restored instead of re-downloaded. pnpm comes from mise (above).
@@ -31,7 +31,7 @@ jobs:
         shell: bash
         run: echo "path=$(pnpm store path --silent)" >> "$GITHUB_OUTPUT"
       - name: Cache pnpm store
-        uses: actions/cache@v6
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6
         with:
           path: ${{ steps.pnpm-store.outputs.path }}
           key: ${{ runner.os }}-pnpm-store-${{ hashFiles('pnpm-lock.yaml') }}
@@ -56,17 +56,17 @@ jobs:
   e2e:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
 
       - name: Install toolchain (mise)
-        uses: jdx/mise-action@v4
+        uses: jdx/mise-action@c2a87611a18de5b3828c5652fe268e992400cb5c # v4
 
       - name: Locate pnpm store
         id: pnpm-store
         shell: bash
         run: echo "path=$(pnpm store path --silent)" >> "$GITHUB_OUTPUT"
       - name: Cache pnpm store
-        uses: actions/cache@v6
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6
         with:
           path: ${{ steps.pnpm-store.outputs.path }}
           key: ${{ runner.os }}-pnpm-store-${{ hashFiles('pnpm-lock.yaml') }}
@@ -93,11 +93,11 @@ jobs:
         os: [ubuntu-latest, windows-latest]
     runs-on: ${{ matrix.os }}
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
 
       # mise provides the pinned Rust toolchain (rust = "1.96" in mise.toml), plus just.
       - name: Install toolchain (mise)
-        uses: jdx/mise-action@v4
+        uses: jdx/mise-action@c2a87611a18de5b3828c5652fe268e992400cb5c # v4
 
       # Building the src-tauri crate on Linux needs the Tauri v2 GTK/WebKit system
       # libraries. Windows runners ship WebView2, so no equivalent step there.
@@ -119,7 +119,7 @@ jobs:
 
       # Cache the cargo registry + target dir keyed on Cargo.lock and the matrix OS.
       - name: Rust cache
-        uses: Swatinem/rust-cache@v2
+        uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2
 
       # Same recipe the pre-push Rust gate runs locally (justfile is the single source
       # of truth), so local == CI: workspace test + clippy (-D warnings) + fmt check.
@@ -129,17 +129,17 @@ jobs:
   native-e2e:
     runs-on: windows-latest
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
 
       - name: Install toolchain (mise)
-        uses: jdx/mise-action@v4
+        uses: jdx/mise-action@c2a87611a18de5b3828c5652fe268e992400cb5c # v4
 
       - name: Locate pnpm store
         id: pnpm-store
         shell: bash
         run: echo "path=$(pnpm store path --silent)" >> "$GITHUB_OUTPUT"
       - name: Cache pnpm store
-        uses: actions/cache@v6
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6
         with:
           path: ${{ steps.pnpm-store.outputs.path }}
           key: ${{ runner.os }}-pnpm-store-${{ hashFiles('pnpm-lock.yaml') }}
@@ -150,14 +150,14 @@ jobs:
         run: pnpm install --frozen-lockfile
 
       - name: Rust cache
-        uses: Swatinem/rust-cache@v2
+        uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2
 
       - name: Native Tauri E2E
         run: just native-e2e
 
       - name: Upload native screenshots and logs
         if: always()
-        uses: actions/upload-artifact@v6
+        uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6
         with:
           name: native-e2e-windows
           path: test-results/native-e2e
@@ -177,14 +177,14 @@ jobs:
     if: github.event_name == 'pull_request'
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
           # Full history so we can diff the PR head against its base ref.
           fetch-depth: 0
 
       # mise provisions cargo-mutants (cargo backend, binstalled) plus node/pnpm/just.
       - name: Install toolchain (mise)
-        uses: jdx/mise-action@v4
+        uses: jdx/mise-action@c2a87611a18de5b3828c5652fe268e992400cb5c # v4
 
       # The PR base isn't necessarily main; fetch exactly the branch this PR targets
       # so `origin/<base_ref>` resolves for the diff.
@@ -196,7 +196,7 @@ jobs:
         shell: bash
         run: echo "path=$(pnpm store path --silent)" >> "$GITHUB_OUTPUT"
       - name: Cache pnpm store
-        uses: actions/cache@v6
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6
         with:
           path: ${{ steps.pnpm-store.outputs.path }}
           key: ${{ runner.os }}-pnpm-store-${{ hashFiles('pnpm-lock.yaml') }}
@@ -209,7 +209,7 @@ jobs:
       # Persist Stryker's incremental results across runs so unchanged mutants are
       # reused — Stryker mutates whole files, so this keeps large-file edits cheap.
       - name: Cache Stryker incremental
-        uses: actions/cache@v6
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6
         with:
           path: reports/stryker-incremental.json
           key: stryker-incremental-${{ github.sha }}
@@ -218,7 +218,7 @@ jobs:
 
       # cargo-mutants builds the core crate per mutant; cache the registry + target.
       - name: Rust cache
-        uses: Swatinem/rust-cache@v2
+        uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2
 
       # Diff-only gates. No Tauri GTK/WebKit apt step needed: --in-diff runs against
       # -p photo-diary-core only, so src-tauri never builds.
