@@ -12,8 +12,8 @@
         },
         "issue": 55,
         "branch": "chore/focus-maintenance",
-        "head": "cb84e21c96b7187af62ec96f1ab6c99e22cf84b6",
-        "tree": "44559b8fdd22358c734d94268e335252bd1d440d",
+        "head": "2ccb0fe4274b58e950000b1c0e3a3f503af8a02e",
+        "tree": "490a35670b7ec8d6d188b2d1d3cff74eb7d23a22",
         "scopes": [
           ".github/workflows/ci.yml",
           ".github/PULL_REQUEST_TEMPLATE.md",
@@ -28,24 +28,14 @@
           "docs/adr/windows-ci-budget.md",
           ".pr-workflow/contexts.json",
           "docs/DEVELOPMENT.md",
-          "docs/ARCHITECTURE.md"
+          "docs/ARCHITECTURE.md",
+          ".devcontainer/Dockerfile"
         ],
-        "initial_dirty": {
-          ".github/PULL_REQUEST_TEMPLATE.md": "1494400f82bc9e0398483a734df15e6b1a11e6ae8a5999223203748c8f084937",
-          ".github/workflows/ci.yml": "f1643d169260a5d6a7638d925c5ce1a3eb7b7e2683d8155d8334cd25e6559d5d",
-          "CONTRIBUTING.md": "3a56303e2ef6fad227b7459b9f9201c24e7236013eaa9316a1ce115487280d4a",
-          "README.md": "29abf82e176bf827eb21c70cd357fdb73f92b480ba8d1df466f9b6c9a7804b01",
-          "docs/adr/windows-ci-budget.md": "51cc38082b60b92b10f263eb86830024f2cbadd3791e729cf592d8ca8bae4d4e",
-          "justfile": "be0d8e6237e26c4b3e65f054bbf5e4c722cab233e0df85ed32e01899d4ed869a",
-          "mise.toml": "08fbcd1fc48845f4ec63cd4a5d77bcb858dd49a8862d09d15d416335c87719fe",
-          "package.json": "5ab61419a48b26699211a94e8db60065fa56c29e96c3aec038bf6cd5edd412d6",
-          "pnpm-lock.yaml": "72a52af81b781e979067f7d48508d0b1bf77a551416f5f02da1a4e4bddaf2d4c",
-          "pnpm-workspace.yaml": "e5c3366f244a9541897088b5132ba97af5414f55d17917f3ef6df544eda6a6d6"
-        },
+        "initial_dirty": {},
         "adopted": false
       },
-      "object": "149897660fc279c17546c11fbe3650e555ae8a3c",
-      "signed_commit": "tree 44559b8fdd22358c734d94268e335252bd1d440d\nparent cb84e21c96b7187af62ec96f1ab6c99e22cf84b6\nauthor Yasunobu <42543015+P4suta@users.noreply.github.com> 1792492705 +0900\ncommitter Yasunobu <42543015+P4suta@users.noreply.github.com> 1792492705 +0900\ngpgsig -----BEGIN SSH SIGNATURE-----\n U1NIU0lHAAAAAQAAADMAAAALc3NoLWVkMjU1MTkAAAAggYuFWiqTPADsoSIEpaH7qKaADz\n KmGLmP6IPbTLrOaDQAAAADZ2l0AAAAAAAAAAZzaGE1MTIAAABTAAAAC3NzaC1lZDI1NTE5\n AAAAQNWguO6KF23H68V2+doI9JVf7IWNr7W/lX3VG4Z4Mnokas0JxvmZMZzmF4RZ1G20EU\n eoYMPwBhgqD506ZfwIOwQ=\n -----END SSH SIGNATURE-----\n\n{\"schema\":1,\"destination\":{\"repository\":\"P4suta/photo-diary\",\"repository_id\":1299941570,\"owner_id\":42543015,\"required\":true},\"issue\":55,\"branch\":\"chore/focus-maintenance\",\"head\":\"cb84e21c96b7187af62ec96f1ab6c99e22cf84b6\",\"tree\":\"44559b8fdd22358c734d94268e335252bd1d440d\",\"scopes\":[\".github/workflows/ci.yml\",\".github/PULL_REQUEST_TEMPLATE.md\",\"README.md\",\"CONTRIBUTING.md\",\"justfile\",\"mise.toml\",\"package.json\",\"pnpm-lock.yaml\",\"pnpm-workspace.yaml\",\"vite.config.ts\",\"docs/adr/windows-ci-budget.md\",\".pr-workflow/contexts.json\",\"docs/DEVELOPMENT.md\",\"docs/ARCHITECTURE.md\"],\"initial_dirty\":{\".github/PULL_REQUEST_TEMPLATE.md\":\"1494400f82bc9e0398483a734df15e6b1a11e6ae8a5999223203748c8f084937\",\".github/workflows/ci.yml\":\"f1643d169260a5d6a7638d925c5ce1a3eb7b7e2683d8155d8334cd25e6559d5d\",\"CONTRIBUTING.md\":\"3a56303e2ef6fad227b7459b9f9201c24e7236013eaa9316a1ce115487280d4a\",\"README.md\":\"29abf82e176bf827eb21c70cd357fdb73f92b480ba8d1df466f9b6c9a7804b01\",\"docs/adr/windows-ci-budget.md\":\"51cc38082b60b92b10f263eb86830024f2cbadd3791e729cf592d8ca8bae4d4e\",\"justfile\":\"be0d8e6237e26c4b3e65f054bbf5e4c722cab233e0df85ed32e01899d4ed869a\",\"mise.toml\":\"08fbcd1fc48845f4ec63cd4a5d77bcb858dd49a8862d09d15d416335c87719fe\",\"package.json\":\"5ab61419a48b26699211a94e8db60065fa56c29e96c3aec038bf6cd5edd412d6\",\"pnpm-lock.yaml\":\"72a52af81b781e979067f7d48508d0b1bf77a551416f5f02da1a4e4bddaf2d4c\",\"pnpm-workspace.yaml\":\"e5c3366f244a9541897088b5132ba97af5414f55d17917f3ef6df544eda6a6d6\"},\"adopted\":false}"
+      "object": "83ce3dda853a04c5a9365de9c1a26c508cfa9afa",
+      "signed_commit": "tree 490a35670b7ec8d6d188b2d1d3cff74eb7d23a22\nparent 2ccb0fe4274b58e950000b1c0e3a3f503af8a02e\nauthor Yasunobu <42543015+P4suta@users.noreply.github.com> 1792493783 +0900\ncommitter Yasunobu <42543015+P4suta@users.noreply.github.com> 1792493783 +0900\ngpgsig -----BEGIN SSH SIGNATURE-----\n U1NIU0lHAAAAAQAAADMAAAALc3NoLWVkMjU1MTkAAAAggYuFWiqTPADsoSIEpaH7qKaADz\n KmGLmP6IPbTLrOaDQAAAADZ2l0AAAAAAAAAAZzaGE1MTIAAABTAAAAC3NzaC1lZDI1NTE5\n AAAAQAdNfFk/PHenL92TS/zBECchnZHClEpVH/d7kbLW/A12OIqpiQIbgs6RPlRsAxZl4w\n ef9DgAmt9zz3CXIGlnjgc=\n -----END SSH SIGNATURE-----\n\n{\"schema\":1,\"destination\":{\"repository\":\"P4suta/photo-diary\",\"repository_id\":1299941570,\"owner_id\":42543015,\"required\":true},\"issue\":55,\"branch\":\"chore/focus-maintenance\",\"head\":\"2ccb0fe4274b58e950000b1c0e3a3f503af8a02e\",\"tree\":\"490a35670b7ec8d6d188b2d1d3cff74eb7d23a22\",\"scopes\":[\".github/workflows/ci.yml\",\".github/PULL_REQUEST_TEMPLATE.md\",\"README.md\",\"CONTRIBUTING.md\",\"justfile\",\"mise.toml\",\"package.json\",\"pnpm-lock.yaml\",\"pnpm-workspace.yaml\",\"vite.config.ts\",\"docs/adr/windows-ci-budget.md\",\".pr-workflow/contexts.json\",\"docs/DEVELOPMENT.md\",\"docs/ARCHITECTURE.md\",\".devcontainer/Dockerfile\"],\"initial_dirty\":{},\"adopted\":false}"
     }
   ]
 }
