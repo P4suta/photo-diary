@@ -5,6 +5,10 @@ import type { Plugin } from 'vite'
 // vitest/config extends vite's defineConfig so the `test` field is typed.
 import { configDefaults, defineConfig } from 'vitest/config'
 
+const DEV_SERVER_PORT = 5173
+const TEST_WORKER_LIMIT = 2
+const LOGIC_COVERAGE_THRESHOLD = 90
+
 // .ts tests that need a DOM (jsdom), so they're carved out of the node project and
 // added to jsdom explicitly. Structural globs (below) handle everything else, so a
 // new test file can never silently match zero projects.
@@ -34,7 +38,7 @@ export default defineConfig(({ mode }) => ({
   // Tauri-generated HTML under target/. The application has one browser entry.
   optimizeDeps: { entries: ['index.html'] },
   server: {
-    port: 5173,
+    port: DEV_SERVER_PORT,
     // Native builds and acceptance runs create large generated trees. They are
     // never frontend inputs and must not consume Windows filesystem handles.
     watch: {
@@ -51,7 +55,7 @@ export default defineConfig(({ mode }) => ({
     // Windows can otherwise attempt to spawn one jsdom worker per test file and
     // intermittently exhaust desktop-process resources. Two workers keeps the
     // verification gate deterministic without serializing the whole suite.
-    maxWorkers: 2,
+    maxWorkers: TEST_WORKER_LIMIT,
     // Splitting tests by environment mirrors the architecture's layers directly.
     //  - node   : pure domain / lib / contract / store (no DOM, lightweight and fast)
     //  - jsdom  : UI components / interaction / a11y (need React rendering)
@@ -96,8 +100,18 @@ export default defineConfig(({ mode }) => ({
       ],
       // Enforce thresholds only on the pure-logic layers (domain/lib). The UI is report-only, grown incrementally.
       thresholds: {
-        'src/domain/**': { statements: 90, branches: 90, functions: 90, lines: 90 },
-        'src/lib/**': { statements: 90, branches: 90, functions: 90, lines: 90 },
+        'src/domain/**': {
+          statements: LOGIC_COVERAGE_THRESHOLD,
+          branches: LOGIC_COVERAGE_THRESHOLD,
+          functions: LOGIC_COVERAGE_THRESHOLD,
+          lines: LOGIC_COVERAGE_THRESHOLD,
+        },
+        'src/lib/**': {
+          statements: LOGIC_COVERAGE_THRESHOLD,
+          branches: LOGIC_COVERAGE_THRESHOLD,
+          functions: LOGIC_COVERAGE_THRESHOLD,
+          lines: LOGIC_COVERAGE_THRESHOLD,
+        },
       },
     },
   },
