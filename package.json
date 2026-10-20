@@ -62,12 +62,12 @@
     "@wdio/tauri-plugin": "1.5.0",
     "@wdio/tauri-service": "1.5.0",
     "@wdio/types": "9.32.0",
-    "@vitest/coverage-v8": "^4.1.10",
+    "@vitest/coverage-v8": "^5.0.0",
     "jsdom": "^29.1.1",
     "tailwindcss": "^4.3.3",
     "typescript": "^7.0.2",
     "vite": "^8.1.5",
-    "vitest": "^4.1.10",
+    "vitest": "^5.0.0",
     "vitest-axe": "^0.1.0"
   },
   "pnpm": {
