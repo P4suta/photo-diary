@@ -148,12 +148,11 @@ native-e2e:
     pnpm tauri build --features native-e2e --config src-tauri/tauri.e2e.conf.json --no-bundle
     pnpm native-e2e
 
-# ── Mutation testing (heavy; PR-diff gate, NOT part of check / pre-push) ───────
+# ── Optional local mutation diagnostics ─────────────────────────────────────
 
 # Mutation testing complements coverage: it injects faults and checks the tests
-# actually catch them. Heavy like e2e, so it stays out of `check` / pre-push and
-# runs as its own PR-diff CI job. Baseline runs are manual (`mutation` /
-# `mutation-rust`); the CI gate uses the diff-only recipes below.
+# actually catch them. Choose a bounded target and resource budget before use.
+# These commands stay outside CI, `check`, and pre-push.
 
 # Full-repo TS mutation (StrykerJS over domain/lib). Baseline / manual — writes an
 # HTML report to reports/mutation/.
@@ -169,13 +168,13 @@ mutation-rust:
 
 # Diff-only TS mutation: mutate only the domain/lib files changed vs the base ref.
 # Stryker has no --since, so a node driver enumerates them (portable sh/PowerShell,
-# like `clean`). This is the CI PR gate; `base` defaults to origin/main locally.
+# like `clean`). `base` defaults to origin/main locally.
 [group('mutation')]
 mutation-diff base='origin/main':
     pnpm exec node scripts/mutation-ts-diff.mjs {{base}}
 
 # Diff-only Rust mutation: cargo-mutants --in-diff against the base ref (only
-# changed lines). The CI PR gate; `base` defaults to origin/main locally.
+# changed lines). `base` defaults to origin/main locally.
 [group('mutation')]
 mutation-rust-diff base='origin/main':
     pnpm exec node scripts/mutation-rust-diff.mjs {{base}}

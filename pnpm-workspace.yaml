@@ -1,0 +1,8 @@
+overrides:
+  '@wdio/native-utils': 2.8.0
+  'typed-rest-client>qs': 6.16.1
+
+allowBuilds:
+  edgedriver: false
+  esbuild: true
+  geckodriver: false

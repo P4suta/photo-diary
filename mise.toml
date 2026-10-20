@@ -7,8 +7,8 @@
 # JS runtime for the Vite/React frontend. Exact-pinned (was "lts").
 node = "24.22.0"
 # Package manager. pnpm over npm: content-addressed store, strict node_modules,
-# fast installs. Exact-pinned to match `packageManager` in package.json (pnpm@10.34.4).
-pnpm = "10.34.7"
+# fast installs. Match package.json's packageManager.
+pnpm = "12.14.0"
 # Lint + format for TS/TSX/JSON (biome check / --write). One version, local + CI.
 biome = "2.5.0"
 # The Rust core (photo-diary-core) and Tauri shell (src-tauri). Separate from the
@@ -38,7 +38,7 @@ lefthook = "2.2.2"
 "cargo:cargo-mutants" = "27.1.0"
 # REUSE 3.3 compliance checker. The pipx backend keeps the Python tool isolated
 # while still exact-pinning the same CLI locally and in CI.
-"pipx:reuse" = "6.2.0"
+"pipx:reuse" = { version = "6.2.0", extras = "charset-normalizer" }
 
 [settings]
 # Fetch cargo: backend tools as prebuilt binaries (cargo-binstall) instead of
