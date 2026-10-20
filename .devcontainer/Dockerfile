@@ -1,7 +1,7 @@
 # photo-diary の開発コンテナ。
 # 方針: このリポジトリは chezmoi + mise 運用。ツールの版は mise.toml が固定するので、
 # ここでは「mise が動く土台」と「Tauri v2 の Linux ビルドに必要なシステム依存」だけ用意する。
-FROM mcr.microsoft.com/devcontainers/base:ubuntu-24.04
+FROM mcr.microsoft.com/devcontainers/base:2.0.5-ubuntu-24.04@sha256:d94c97dd9cacf183d0a6fd12a8e87b526e9e928307674ae9c94139139c0c6eae
 
 # --- Tauri v2 の Linux ビルド依存 + 一般ビルドツール ---
 # (WebKitGTK / GTK3 / rsvg / appindicator / xdo。frontend+コアだけなら不要だが、

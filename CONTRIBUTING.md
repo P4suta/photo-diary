@@ -16,7 +16,8 @@ just dev         # Vite dev server → http://localhost:5173
 
 `just setup` runs `mise install` → `lefthook install` → `pnpm install` in order under the hood. Don't install the toolchain ad hoc on the spot. Declare what you need in `mise.toml` and install it with `mise install` (or `just setup`). The `cargo:` tools (committed / taplo-cli) fetch prebuilt binaries rather than compiling from source, thanks to the `cargo.binstall = true` setting.
 
-The package manager is pnpm (`packageManager: pnpm@10.34.4`). npm is not used. If you haven't activated mise in your shell, prefix each command with `mise exec --`.
+The package manager is pnpm, pinned by `packageManager` and `mise.toml`.
+If you haven't activated mise in your shell, prefix each command with `mise exec --`.
 
 ## Development loop
 
@@ -76,7 +77,15 @@ Leave formatting to `just fmt` rather than doing it by hand. Any unformatted spo
 
 ## Local == CI
 
-Reproducibility is the top priority. CI (`ci.yml`) installs the same toolchain as `mise.toml` via `jdx/mise-action`, then runs four jobs mirroring local recipes: **check** (`pnpm install --frozen-lockfile` → `just check` → `just build`), **e2e** (`just e2e` after installing the Playwright browser), **rust** (an Ubuntu + Windows matrix running `just check-rust`), and **mutation** (PR-only diff mutation testing). If those recipes are green on your machine, CI should produce the same result. `--frozen-lockfile` fails loudly rather than silently re-resolving when `pnpm-lock.yaml` is stale, so don't forget to commit the lockfile after adding a dependency.
+CI installs each job's required tools from `mise.toml`.
+It runs four product jobs on PR source updates: frontend checks and build, browser acceptance, Windows Rust workspace checks, and Windows native acceptance.
+Merging the same source doesn't repeat those jobs on main.
+The `required` check still rejects a failed or cancelled product job.
+Commit `pnpm-lock.yaml` and `pnpm-workspace.yaml` when dependency resolution or pnpm policy changes.
+
+Mutation commands remain local diagnostics for a specific test gap.
+Run them deliberately after choosing a bounded target and resource budget.
+CI doesn't start mutation campaigns.
 
 ## Scope
 

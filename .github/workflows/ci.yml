@@ -1,9 +1,8 @@
 name: CI
 
 on:
-  push:
-    branches: [main]
   pull_request:
+    types: [opened, synchronize, reopened]
 
 # One in-flight run per ref; a new push cancels the previous.
 concurrency:
@@ -16,13 +15,16 @@ permissions:
 jobs:
   check:
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
 
-      # Provisions the exact toolchain pinned in mise.toml (node, pnpm, biome,
-      # just, typos, …) — the same versions developers get locally.
-      - name: Install toolchain (mise)
-        uses: jdx/mise-action@c2a87611a18de5b3828c5652fe268e992400cb5c # v4
+      - name: Install frontend check tools
+        uses: jdx/mise-action@fc42bcc7ddbf51124c30f95a877a0c5168a3bfde # v5.2.1
+        with:
+          install_args: node pnpm biome just github:crate-ci/typos pipx:reuse
 
       # Cache the pnpm content-addressed store keyed on the lockfile, so unchanged
       # deps are restored instead of re-downloaded. pnpm comes from mise (above).
@@ -43,6 +45,9 @@ jobs:
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
 
+      - name: Audit frontend runtime dependencies
+        run: pnpm audit --prod
+
       # typecheck + Biome + typos + REUSE + tests with coverage — identical to the pre-push hook.
       # `just check` runs `just coverage`, which enforces the 90% domain/lib thresholds,
       # so the gate is enforced here too (one suite run, not test + coverage twice).
@@ -55,11 +60,16 @@ jobs:
   # E2E is heavy (browser), so it's split into its own job. Not part of pre-push / check.
   e2e:
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
 
-      - name: Install toolchain (mise)
-        uses: jdx/mise-action@c2a87611a18de5b3828c5652fe268e992400cb5c # v4
+      - name: Install browser test tools
+        uses: jdx/mise-action@fc42bcc7ddbf51124c30f95a877a0c5168a3bfde # v5.2.1
+        with:
+          install_args: node pnpm just
 
       - name: Locate pnpm store
         id: pnpm-store
@@ -84,40 +94,19 @@ jobs:
         run: just e2e
 
   rust:
-    # The product ships as a Windows desktop app, so the Rust workspace (photo-diary-core
-    # + the src-tauri shell) is gated on both Linux and Windows. Same gate as local:
-    # `just check-rust` = cargo test --workspace + clippy --workspace + fmt --check.
-    strategy:
-      fail-fast: false
-      matrix:
-        os: [ubuntu-latest, windows-latest]
-    runs-on: ${{ matrix.os }}
+    runs-on: windows-latest
+    timeout-minutes: 30
     steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
 
-      # mise provides the pinned Rust toolchain (rust = "1.96" in mise.toml), plus just.
-      - name: Install toolchain (mise)
-        uses: jdx/mise-action@c2a87611a18de5b3828c5652fe268e992400cb5c # v4
+      - name: Install Rust check tools
+        uses: jdx/mise-action@fc42bcc7ddbf51124c30f95a877a0c5168a3bfde # v5.2.1
+        with:
+          install_args: rust just
 
-      # Building the src-tauri crate on Linux needs the Tauri v2 GTK/WebKit system
-      # libraries. Windows runners ship WebView2, so no equivalent step there.
-      - name: Install Tauri system dependencies (Linux)
-        if: runner.os == 'Linux'
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y \
-            libwebkit2gtk-4.1-dev \
-            libgtk-3-dev \
-            libayatana-appindicator3-dev \
-            librsvg2-dev \
-            libssl-dev \
-            libxdo-dev \
-            build-essential \
-            file \
-            wget \
-            curl
-
-      # Cache the cargo registry + target dir keyed on Cargo.lock and the matrix OS.
+      # Reuse the Windows workspace build for tests and Clippy.
       - name: Rust cache
         uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2
 
@@ -128,11 +117,16 @@ jobs:
 
   native-e2e:
     runs-on: windows-latest
+    timeout-minutes: 30
     steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
 
-      - name: Install toolchain (mise)
-        uses: jdx/mise-action@c2a87611a18de5b3828c5652fe268e992400cb5c # v4
+      - name: Install native acceptance tools
+        uses: jdx/mise-action@fc42bcc7ddbf51124c30f95a877a0c5168a3bfde # v5.2.1
+        with:
+          install_args: node pnpm rust just
 
       - name: Locate pnpm store
         id: pnpm-store
@@ -157,77 +151,11 @@ jobs:
 
       - name: Upload native screenshots and logs
         if: always()
-        uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: native-e2e-windows
           path: test-results/native-e2e
           if-no-files-found: warn
-
-  # Differential mutation testing — a PR-only quality gate on the pure-logic layers
-  # (TS domain/lib via StrykerJS, Rust core via cargo-mutants). It only mutates what
-  # the PR changed vs its base, so it enforces "don't add a test that can't catch a
-  # bug" without first clearing the whole existing backlog. Heavy, so it's its own
-  # job like e2e — never part of `check` / pre-push. Single Ubuntu runner: mutation
-  # results on pure logic are OS-independent (Windows shipping is covered by `rust`).
-  #
-  # Both sides are enforced. Stryker uses break: 70, while cargo-mutants exits
-  # non-zero for any surviving changed mutant. Rust tests use --test-threads=1 to
-  # keep migration fixtures hermetic (see .cargo/mutants.toml).
-  mutation:
-    if: github.event_name == 'pull_request'
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
-        with:
-          # Full history so we can diff the PR head against its base ref.
-          fetch-depth: 0
-
-      # mise provisions cargo-mutants (cargo backend, binstalled) plus node/pnpm/just.
-      - name: Install toolchain (mise)
-        uses: jdx/mise-action@c2a87611a18de5b3828c5652fe268e992400cb5c # v4
-
-      # The PR base isn't necessarily main; fetch exactly the branch this PR targets
-      # so `origin/<base_ref>` resolves for the diff.
-      - name: Fetch PR base
-        run: git fetch --no-tags origin ${{ github.base_ref }}
-
-      - name: Locate pnpm store
-        id: pnpm-store
-        shell: bash
-        run: echo "path=$(pnpm store path --silent)" >> "$GITHUB_OUTPUT"
-      - name: Cache pnpm store
-        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6
-        with:
-          path: ${{ steps.pnpm-store.outputs.path }}
-          key: ${{ runner.os }}-pnpm-store-${{ hashFiles('pnpm-lock.yaml') }}
-          restore-keys: |
-            ${{ runner.os }}-pnpm-store-
-
-      - name: Install dependencies
-        run: pnpm install --frozen-lockfile
-
-      # Persist Stryker's incremental results across runs so unchanged mutants are
-      # reused — Stryker mutates whole files, so this keeps large-file edits cheap.
-      - name: Cache Stryker incremental
-        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6
-        with:
-          path: reports/stryker-incremental.json
-          key: stryker-incremental-${{ github.sha }}
-          restore-keys: |
-            stryker-incremental-
-
-      # cargo-mutants builds the core crate per mutant; cache the registry + target.
-      - name: Rust cache
-        uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2
-
-      # Diff-only gates. No Tauri GTK/WebKit apt step needed: --in-diff runs against
-      # -p photo-diary-core only, so src-tauri never builds.
-      # Enforced: fails the job if the changed TS pure-logic drops below break: 70.
-      - name: TS mutation (diff)
-        run: just mutation-diff origin/${{ github.base_ref }}
-
-      - name: Rust mutation (diff)
-        run: just mutation-rust-diff origin/${{ github.base_ref }}
 
   # The one status check branch protection requires,
   # named the same in every P4suta repository.
@@ -235,7 +163,7 @@ jobs:
   required:
     name: required
     if: always()
-    needs: [check, e2e, rust, native-e2e, mutation]
+    needs: [check, e2e, rust, native-e2e]
     runs-on: ubuntu-latest
     timeout-minutes: 5
     permissions: {}

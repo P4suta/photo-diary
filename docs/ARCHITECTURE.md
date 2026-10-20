@@ -252,8 +252,10 @@ For reproducibility, local and CI pass through the same recipe (`just check`). T
 - **Setup**: after `just setup`, run `just dev` (http://localhost:5173).
 - **justfile recipes**: `check` includes typecheck, Biome, typos, REUSE 3.3 and coverage; `verify` adds production build and Playwright. Desktop recipes are `app-dev`, `app-build`, `check-rust`, and Windows `native-e2e`.
 - **pnpm scripts**: `dev` / `build` / `preview` / `typecheck` / `test` / `coverage` / `e2e` / `tauri`.
-- **Toolchain (`mise.toml`, all exact-pinned)**: node 24.18.0, pnpm 10.34.4, biome 2.5.0, rust 1.96.0, just 1.54.0, lefthook 2.1.9, typos 1.47.2, committed 1.1.11, taplo-cli 0.10.0, and REUSE 6.2.0.
+- **Toolchain**: `mise.toml` defines the exact project tool versions.
 - **Git gates (lefthook)**: commit-msg = committed (Conventional Commits) / pre-commit = biome (staged) + typos + `taplo fmt --check` / pre-push = `just check`, plus `just check-rust` when the push includes Rust files (`*.rs` / `Cargo.*`).
-- **CI (`.github/workflows/ci.yml`)** — `check`, Playwright `e2e`, Linux/Windows `rust`, Windows `native-e2e`, and PR-only `mutation`. Native artifacts retain logs plus 1180×820/900×600 en/ja light/dark screenshots.
+- **CI** runs frontend checks, browser acceptance, Windows Rust checks, and Windows native acceptance on PR source updates.
+  Native artifacts retain logs and screenshots.
+  Main merges and automatic mutation campaigns don't repeat those jobs.
 
 The design source (the Claude Design handoff `_handoff/`) and the internal memo `CLAUDE.md` are gitignored and reference-only.

@@ -33,9 +33,16 @@ Even if it compiles, breaking these is a regression. Dependencies point **inward
 
 ## Toolchain & shell promises
 
-- **Tools are pinned in `mise.toml`, all exact.** node (24.18.0), pnpm (10.34.4), biome (2.5.0), rust (1.96.0), just (1.54.0), lefthook (2.1.9), `github:crate-ci/typos` (1.47.2), `cargo:committed` (1.1.11), `cargo:taplo-cli` (0.10.0), and `pipx:reuse` (6.2.0) are declared. Don't hand-install project tools; add them to `mise.toml` and run `mise install`.
+For Windows desktop builds, install the C++ build tools and WebView2 described in [Tauri's Windows prerequisites](https://v2.tauri.app/start/prerequisites/#windows).
+Then follow the source setup commands in the [README](../README.md).
+
+- **Tools and exact versions live in `mise.toml`.**
+  Declare project tools there and install them with `mise install`.
 - **`just` is the only entry point.** Route dev / build work through justfile recipes. Don't invoke raw `pnpm` / `biome` / `git` directly in routines — add a recipe. That keeps the bundling/gating logic in one place. Right after `just setup`, run `just doctor` to confirm the environment matches the pins.
-- **The package manager is pnpm.** `npm` is not used (`package.json`'s `packageManager`: `pnpm@10.34.4`). The content-addressed store and strict `node_modules` are the reasons. CI uses `pnpm install --frozen-lockfile`, so always commit `pnpm-lock.yaml` when you change dependencies.
+- **The package manager is pnpm.**
+  `package.json` and `mise.toml` pin the same version.
+  Keep its configuration in `pnpm-workspace.yaml` and commit the generated `pnpm-lock.yaml` when dependencies change.
+  CI uses `pnpm install --frozen-lockfile`.
 - **Don't write shell-specific syntax into justfile / lefthook.** The justfile declares `set windows-shell := ["powershell.exe", "-NoProfile", "-Command"]` on Windows. Don't chain multiple steps with `&&`; split them into recipe lines (or hook jobs). For ad hoc one-offs use PowerShell (this repo's primary shell), and Git Bash only when POSIX is genuinely required.
 
 ## Tasks (just recipes)
@@ -64,7 +71,7 @@ Even if it compiles, breaking these is a regression. Dependencies point **inward
 | `just check-rust` | `app-test` + `app-lint` | the full Rust-side gate |
 | `just native-e2e` | feature-isolated Tauri build + WDIO | Windows real SQLite/IPC acceptance |
 | `just mutation` / `mutation-rust` | StrykerJS (TS domain/lib) / cargo-mutants (Rust core), whole repo | mutation baseline (manual, heavy) |
-| `just mutation-diff` / `mutation-rust-diff` | the same, but only what changed vs a base ref | the PR-diff mutation gate |
+| `just mutation-diff` / `mutation-rust-diff` | the same, but only what changed vs a base ref | optional local test diagnosis |
 
 The pnpm scripts (`package.json`) include `dev` / `build` / `preview` / `typecheck` / `test` / `coverage` / `e2e` / `native-e2e` / `tauri`. The justfile wraps these. Day to day, use `just` rather than raw pnpm. First browser E2E run locally needs Chromium once: `pnpm exec playwright install chromium`. Windows native E2E follows Tauri's WebdriverIO approach and uses the feature-isolated test build from `just native-e2e`.
 
@@ -78,19 +85,21 @@ The gates share one definition between local and CI. The hooks are managed by le
   - `typos` — spell-check the whole working tree (config `_typos.toml`).
   - `taplo fmt --check` — check that staged `*.toml` are formatted (config `taplo.toml`).
 - **pre-push** — `just check` (= typecheck + Biome + typos + coverage). Plus `rust-gate`: `just check-rust`, glob-filtered so it only runs when the push touches `*.rs` / `Cargo.*` (a JS-only push skips it).
-- **CI** (`.github/workflows/ci.yml`, `push: [main]` and all PRs) — **check** includes REUSE 3.3, **e2e** runs Playwright, **rust** runs Linux + Windows gates, **native-e2e** drives the feature-isolated Tauri binary with embedded WDIO on Windows, and **mutation** checks changed pure logic.
+- **CI** runs on PR source updates.
+  It retains frontend checks and coverage, browser acceptance, Windows Rust workspace checks, and Windows native acceptance.
+  Each job installs only its required pinned tools.
+  Main merges and mutation campaigns don't repeat that work.
 
 Because the hooks and CI run the same recipes, `--no-verify` only defers a failure to CI.
 
-### Mutation testing (the fourth gate)
+### Optional local mutation diagnosis
 
-Coverage proves a line *ran*; mutation testing proves a test would *fail* if that line were wrong. StrykerJS mutates the TS pure-logic layers (`src/domain` / `src/lib`, via `vitest.stryker.config.ts` + `stryker.config.json`), and cargo-mutants mutates the Rust core crate (`.cargo/mutants.toml`) — the same pure layers that carry the 90% coverage thresholds.
-
-- **PR-diff scope.** The CI `mutation` job only mutates what the PR touched (Stryker via a node driver that lists changed `domain`/`lib` files for `--mutate`; cargo-mutants via `--in-diff`). It enforces the *new* change without demanding you first clear the whole existing backlog — the same "enforce on the diff" spirit as the coverage gate.
-- **The two sides gate differently.** Stryker uses a percentage `break` threshold (`thresholds.break`); cargo-mutants has **no percentage** — a single surviving mutant exits non-zero. Mind the asymmetry when reading failures.
-- **A whole-file caveat (TS).** Stryker has no line-level diff filter, so `--mutate <changed file>` re-mutates the *entire* file — a one-line edit to a big well-tested file can surface a pre-existing survivor. `incremental` (cached in CI) reuses unchanged mutants to soften this; cargo-mutants is line-scoped and doesn't have the issue.
-- **Baselines & thresholds (measured).** TS full baseline is **87.3%** (StrykerJS over domain/lib; lowest files are `domain/tokens.ts` 75% and `build/timeline.ts` 80%). `stryker.config.json` sets `break: 70` — under the lowest file so touching existing code doesn't spuriously fail, while still catching a genuinely weak change. **The TS diff gate is enforced.**
-- **Rust needs single-threaded mutation tests.** cargo-mutants runs with `--test-threads=1` (`.cargo/mutants.toml`) because the db migration tests can otherwise contend under cargo-mutants' isolated target dir; `cargo test --workspace` itself stays parallel and green. The Rust diff gate is enforced: any surviving changed mutant exits non-zero and fails CI.
+Use mutation testing for a concrete test gap after choosing a bounded target and resource budget.
+Stryker's configuration targets TypeScript domain logic and cargo-mutants targets the Rust core.
+The diff recipes narrow the work to changed code.
+Stryker still mutates whole changed files, so review the target size before starting.
+These commands run locally and stay outside CI, `just check`, and pre-push.
+The configuration files define the current thresholds and test isolation settings.
 
 ## Editor
 
