@@ -22,7 +22,7 @@ jobs:
       # Provisions the exact toolchain pinned in mise.toml (node, pnpm, biome,
       # just, typos, …) — the same versions developers get locally.
       - name: Install toolchain (mise)
-        uses: jdx/mise-action@c2a87611a18de5b3828c5652fe268e992400cb5c # v4
+        uses: jdx/mise-action@9b200bcecbfd6303e69a4a261b2e09e3757440a7 # v5
 
       # Cache the pnpm content-addressed store keyed on the lockfile, so unchanged
       # deps are restored instead of re-downloaded. pnpm comes from mise (above).
@@ -59,7 +59,7 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
 
       - name: Install toolchain (mise)
-        uses: jdx/mise-action@c2a87611a18de5b3828c5652fe268e992400cb5c # v4
+        uses: jdx/mise-action@9b200bcecbfd6303e69a4a261b2e09e3757440a7 # v5
 
       - name: Locate pnpm store
         id: pnpm-store
@@ -97,7 +97,7 @@ jobs:
 
       # mise provides the pinned Rust toolchain (rust = "1.96" in mise.toml), plus just.
       - name: Install toolchain (mise)
-        uses: jdx/mise-action@c2a87611a18de5b3828c5652fe268e992400cb5c # v4
+        uses: jdx/mise-action@9b200bcecbfd6303e69a4a261b2e09e3757440a7 # v5
 
       # Building the src-tauri crate on Linux needs the Tauri v2 GTK/WebKit system
       # libraries. Windows runners ship WebView2, so no equivalent step there.
@@ -132,7 +132,7 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
 
       - name: Install toolchain (mise)
-        uses: jdx/mise-action@c2a87611a18de5b3828c5652fe268e992400cb5c # v4
+        uses: jdx/mise-action@9b200bcecbfd6303e69a4a261b2e09e3757440a7 # v5
 
       - name: Locate pnpm store
         id: pnpm-store
@@ -184,7 +184,7 @@ jobs:
 
       # mise provisions cargo-mutants (cargo backend, binstalled) plus node/pnpm/just.
       - name: Install toolchain (mise)
-        uses: jdx/mise-action@c2a87611a18de5b3828c5652fe268e992400cb5c # v4
+        uses: jdx/mise-action@9b200bcecbfd6303e69a4a261b2e09e3757440a7 # v5
 
       # The PR base isn't necessarily main; fetch exactly the branch this PR targets
       # so `origin/<base_ref>` resolves for the diff.
