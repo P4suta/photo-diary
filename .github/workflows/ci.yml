@@ -22,7 +22,7 @@ jobs:
           persist-credentials: false
 
       - name: Install frontend check tools
-        uses: jdx/mise-action@fc42bcc7ddbf51124c30f95a877a0c5168a3bfde # v5.2.1
+        uses: jdx/mise-action@8418fedb1110381a0d3ba51a7a415d7c1b884550 # v5.2.2
         with:
           install_args: node pnpm biome just github:crate-ci/typos pipx:reuse
 
@@ -67,7 +67,7 @@ jobs:
           persist-credentials: false
 
       - name: Install browser test tools
-        uses: jdx/mise-action@fc42bcc7ddbf51124c30f95a877a0c5168a3bfde # v5.2.1
+        uses: jdx/mise-action@8418fedb1110381a0d3ba51a7a415d7c1b884550 # v5.2.2
         with:
           install_args: node pnpm just
 
@@ -102,7 +102,7 @@ jobs:
           persist-credentials: false
 
       - name: Install Rust check tools
-        uses: jdx/mise-action@fc42bcc7ddbf51124c30f95a877a0c5168a3bfde # v5.2.1
+        uses: jdx/mise-action@8418fedb1110381a0d3ba51a7a415d7c1b884550 # v5.2.2
         with:
           install_args: rust just
 
@@ -124,7 +124,7 @@ jobs:
           persist-credentials: false
 
       - name: Install native acceptance tools
-        uses: jdx/mise-action@fc42bcc7ddbf51124c30f95a877a0c5168a3bfde # v5.2.1
+        uses: jdx/mise-action@8418fedb1110381a0d3ba51a7a415d7c1b884550 # v5.2.2
         with:
           install_args: node pnpm rust just
 
