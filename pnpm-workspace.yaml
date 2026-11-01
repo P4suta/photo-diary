@@ -1,6 +1,6 @@
 overrides:
-  '@wdio/native-utils': 2.8.0
-  'typed-rest-client>qs': 6.16.1
+  '@wdio/native-utils': 2.8.1
+  'typed-rest-client>qs': 6.17.1
 
 allowBuilds:
   edgedriver: false
