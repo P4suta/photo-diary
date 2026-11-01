@@ -5,7 +5,7 @@
 # majors / "lts") so local and CI resolve byte-identical versions.
 [tools]
 # JS runtime for the Vite/React frontend. Exact-pinned (was "lts").
-node = "24.22.2"
+node = "26.13.0"
 # Package manager. pnpm over npm: content-addressed store, strict node_modules,
 # fast installs. Match package.json's packageManager.
 pnpm = "12.16.1"
