@@ -5,10 +5,10 @@
 # majors / "lts") so local and CI resolve byte-identical versions.
 [tools]
 # JS runtime for the Vite/React frontend. Exact-pinned (was "lts").
-node = "24.22.2"
+node = "24.22.3"
 # Package manager. pnpm over npm: content-addressed store, strict node_modules,
 # fast installs. Match package.json's packageManager.
-pnpm = "12.18.0"
+pnpm = "12.20.0"
 # Lint + format for TS/TSX/JSON (biome check / --write). One version, local + CI.
 biome = "2.5.0"
 # The Rust core (photo-diary-core) and Tauri shell (src-tauri). Separate from the
@@ -16,7 +16,7 @@ biome = "2.5.0"
 # Components are pinned explicitly: `check-rust` runs clippy + rustfmt, and mise's
 # default rust profile is minimal (no clippy on a clean CI runner), so declare them
 # here — otherwise local (which had them) and CI diverge.
-rust = { version = "1.99.1", components = "clippy,rustfmt" }
+rust = { version = "1.100.0", components = "clippy,rustfmt" }
 # Task runner (justfile). `just setup` provisions hooks; CI runs the same recipes,
 # so bundling/gate logic lives in exactly one place. Exact-pinned.
 just = "1.59.0"
@@ -25,7 +25,7 @@ just = "1.59.0"
 lefthook = "2.2.2"
 # Source spell-check (pre-commit hook + `just typos`). crate-ci; the github backend
 # fetches the prebuilt binary. Exact-pinned.
-"github:crate-ci/typos" = "1.52.0"
+"github:crate-ci/typos" = "1.52.2"
 # Conventional-Commits linter for the commit-msg hook — keeps history well-formed
 # for future release automation. cargo backend, binstalled. Exact-pinned.
 "cargo:committed" = "1.1.12"
