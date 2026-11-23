@@ -27,7 +27,7 @@ export function Toast() {
       className="fixed bottom-5 right-5 z-50 flex items-center gap-3 rounded-lg border border-border bg-card text-card-foreground shadow-pop px-4 py-3 max-w-[360px]"
     >
       <span className="w-1.5 h-1.5 shrink-0 rounded-full bg-destructive" />
-      <span className="text-[12px]">{t(toastKey, toastParams)}</span>
+      <span className="text-[12px]">{t(toastKey, toastParams ?? {})}</span>
       <button
         type="button"
         aria-label={t('errors.dismiss')}
